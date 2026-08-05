@@ -11,9 +11,10 @@ def _():
     import pyam
     import nomenclature
     import matplotlib.pyplot as plt
+    import math
     import marimo as mo
 
-    return mo, pd, pyam
+    return math, mo, pd, pyam
 
 
 @app.cell(hide_code=True)
@@ -46,10 +47,12 @@ def _(pdf):
 
 
 @app.cell
-def _(cars_absolute, pd):
+def _(cars_absolute, math, pd):
     cars_absolute_numeric = cars_absolute.apply(pd.to_numeric, errors="coerce")
     common_basis = cars_absolute_numeric.sum(axis = 0, skipna = True).loc[2023]
     #technology_shares = cars_absolute_numeric.div(cars_absolute_numeric.sum(axis=0, skipna=True), axis=1)
+    if math.isclose(common_basis,0):
+        raise Exception("Comparison-variable 'common_basis' is near zero. ")
     technology_shares = cars_absolute_numeric.div(common_basis, axis = 1)
     technology_shares.index = [f"{variable} Share" for variable in technology_shares.index]
     cars_absolute_with_shares = pd.concat([cars_absolute_numeric, technology_shares])
@@ -60,6 +63,11 @@ def _(cars_absolute, pd):
 def _(cars_absolute_with_shares):
     cars_absolute_with_shares[2025] = cars_absolute_with_shares[[2021,2030]].mean(axis=1)
     cars_absolute_with_shares.filter(like = "Share", axis = 0)[[2025,2030,2040]]
+    return
+
+
+@app.cell
+def _():
     return
 
 
