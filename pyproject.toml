@@ -9,9 +9,10 @@ description = "Preprocessing tools for ESM scenario input data"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-  "pandas",
-  "pyam-iamc",
-  "marimo",
+  "pandas>=1.0.0",
+  "pyam-iamc>=2.0.0",
+  "marimo>=0.7,<1.0",
+  "nomenclature-iamc>=0.29",
 ]
 
 [tool.setuptools]
@@ -27,8 +28,3 @@ platforms = ["linux-64", "osx-64", "osx-arm64", "win-64"]
 [tool.pixi.dependencies]
 python = ">=3.10"
 marimo = ">=0.7,<1.0"
-
-[tool.pixi.pypi-dependencies]
-pandas = ">=1.0.0"
-pyam-iamc = ">=2.0.0"
-nomenclature-iamc = ">=0.29"
