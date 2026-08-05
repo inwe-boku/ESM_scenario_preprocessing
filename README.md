@@ -1,3 +1,5 @@
+![Python](https://img.shields.io/badge/python-3.14-blue)  [![license](https://img.shields.io/badge/License-MIT-blue)](https://github.com/maxnutz/pypsa_validation_processing/blob/master/LICENSE) [![pyam](https://img.shields.io/badge/pyam-iamc-blue)](https://github.com/IAMconsortium/pyam)
+
 # ESM_scenario_preprocessing
 
 Preprocesses scenario inputs from the NetZero 2040 project to serve as input for PyPSA-AT.
@@ -34,3 +36,4 @@ pixi shell
 - `pixi.toml`: pixi environment/dependency configuration
 - `src/esm_scenario_preprocessing/`: Python package source
 - `resources/`: local input data folder (ignored by git)
+- `sector-inputs/`: collection of marimo notebooks processing scenario inputdata 
