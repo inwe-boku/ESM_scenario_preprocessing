@@ -32,8 +32,7 @@ pixi shell
 
 ## Project structure
 
-- `pyproject.toml`: pip-installable package configuration
-- `pixi.toml`: pixi environment/dependency configuration
+- `pyproject.toml`: pip-installable package configuration and pixi environment/dependency configuration (`[tool.pixi.*]`)
 - `src/esm_scenario_preprocessing/`: Python package source
 - `resources/`: local input data folder (ignored by git)
-- `sector-inputs/`: collection of marimo notebooks processing scenario inputdata 
+- `sector-inputs/`: collection of marimo notebooks processing scenario input data 
