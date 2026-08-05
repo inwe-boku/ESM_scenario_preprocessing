@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "esm-scenario-preprocessing"
+version = "0.1.0"
+description = "Preprocessing tools for ESM scenario input data"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "pandas>=1.0.0",
+  "pyam-iamc>=2.0.0",
+  "marimo>=0.7,<1.0",
+  "nomenclature-iamc>=0.29",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pixi.workspace]
+channels = ["conda-forge"]
+platforms = ["linux-64", "osx-64", "osx-arm64", "win-64"]
+
+[tool.pixi.dependencies]
+python = ">=3.10"
+marimo = ">=0.7,<1.0"
