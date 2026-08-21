@@ -13,6 +13,8 @@ dependencies = [
   "pyam-iamc>=2.0.0",
   "marimo>=0.7,<1.0",
   "nomenclature-iamc>=0.29",
+  "plotly>=5.0",
+  "pypsa>=1.2.4,<2",
 ]
 
 [tool.setuptools]
@@ -30,3 +32,8 @@ python = ">=3.10"
 marimo = ">=0.7,<1.0"
 matplotlib = ">=3.11.1,<4"
 numpy = ">=2.5.1,<3"
+ruff = ">=0.16.3,<0.17"
+plotly = ">=5.0"
+
+[tool.pixi.pypi-dependencies]
+esm-scenario-preprocessing = { path = ".", editable = true }
