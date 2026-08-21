@@ -177,7 +177,6 @@ def _(go, industrial_energy_demand, render_sankey_switch, year):
     # than an input and are out of scope for an input -> sector Sankey.
     _flows = _at_energy_demand.stack()
     _flows = _flows[_flows > 0]
-    flows = _flows 
     industrial_energy_sankey_at = go.Figure(
         go.Sankey(
             node={"label": _node_labels, "pad": 30, "thickness": 20},
@@ -235,10 +234,18 @@ def _(energy_inputs_harmonization, pd):
 
 
 @app.cell(hide_code=True)
-def _(industrial_energy_demand, nefi_total_industry_fe_in_pypsa, pd, year):
+def _(
+    industrial_energy_demand,
+    nefi_total_industry_fe_in_pypsa,
+    pd,
+    pypsa_combinations_for_nefi_inputs_dict,
+    year,
+):
+    # combine sectors in pypsa-setting for consistency
     _industrial_energy_demand = industrial_energy_demand.T
-    _industrial_energy_demand["coal and coke"] = _industrial_energy_demand[["coal", "coke"]].sum(axis = 1)
-    _industrial_energy_demand.drop(["coal", "coke"], axis = 1, inplace = True)
+    for _key, _list in pypsa_combinations_for_nefi_inputs_dict.items():
+        _industrial_energy_demand[_key] = _industrial_energy_demand[_list].sum(axis = 1)
+        _industrial_energy_demand.drop(_list, axis = 1, inplace = True)
     _industrial_energy_demand = _industrial_energy_demand.T
     _total_demand_pypsa_at = _industrial_energy_demand.filter(regex = "AT", axis = 1).sum(axis = 1)
     _total_demand_nefi = nefi_total_industry_fe_in_pypsa[year.value]
