@@ -10,7 +10,7 @@ Preprocesses scenario inputs from the NetZero 2040 project (`pyam`/IAMC-formatte
 
 - Use `pixi run <command>` (per project convention). Environment/dependencies are declared in `pyproject.toml` under `[tool.pixi.*]` and `[project.dependencies]`.
 - `pixi install` / `pixi shell` to set up and enter the environment (see README.md).
-- There is no configured test tooling in this repo yet — do not assume `pytest`, etc. is available unless you add and wire them up.
+- Tests use `pytest` and live in `tests/`, mirroring `src/esm_scenario_preprocessing/`. Run them with `pixi run test` (or `pixi run pytest`).
 - use `ruff` as python linter and code formatter.
 - Put local input data in `resources/` (gitignored, except `.gitkeep`).
 
