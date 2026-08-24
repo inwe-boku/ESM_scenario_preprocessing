@@ -4,6 +4,23 @@
 
 Preprocesses scenario inputs from the NetZero 2040 project to serve as input for PyPSA-AT.
 
+## Quick start from Zero
+1. install pixi on your machine/laptop ([Complete Guide](https://pixi.prefix.dev/latest/installation/)
+  ```bash
+  curl -fsSL https://pixi.sh/install.sh | sh
+  ```
+2. restart your terminal
+3. go to the project folder (there `pixi.toml` lives)
+4. start the marimo notebook with
+  ```bash
+  pixi run marimo edit
+  ```
+5. a browser window will open, showing all available notebooks. If you are working on a server, you may have to open the browser-window by yourself, by copy-pasting the link displayed in the terminal. 
+
+## Github collaboration
+- You can't directly push on branch "main", as it is protected
+- If you work on code, you want to push, create a branch (`git checkout -b <your branch name>`), add files, commit and push with `git push`.
+- For merging into main, open a pull request online (Tab "Pull requests"). Sourcery will review your pull request automatically
 ## Requirements
 
 - Python 3.10+
@@ -15,7 +32,7 @@ Core dependencies:
 - pyam-iamc
 - marimo
 
-## Installation
+## Installation of the package
 
 ### With pip
 
