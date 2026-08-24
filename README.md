@@ -5,7 +5,7 @@
 Preprocesses scenario inputs from the NetZero 2040 project to serve as input for PyPSA-AT.
 
 ## Quick start from Zero
-1. install pixi on your machine/laptop ([Complete Guide](https://pixi.prefix.dev/latest/installation/)
+1. install pixi on your machine/laptop ([Complete Guide](https://pixi.prefix.dev/latest/installation/))
   ```bash
   curl -fsSL https://pixi.sh/install.sh | sh
   ```
