@@ -334,7 +334,7 @@ def _(energy_inputs_harmonization, pd, year):
 
     # Combine all sectors
     nefi_inputs_by_sector = pd.concat(dfs, axis=1)
-    return (nefi_inputs_by_sector,)
+    return nefi_inputs_by_sector, sectors
 
 
 @app.cell
@@ -369,28 +369,27 @@ def _(go, nefi_inputs_by_sector, year):
     return
 
 
-@app.cell(hide_code=True)
-def _(energy_inputs_harmonization, pd, year):
+@app.cell
+def _(energy_inputs_harmonization, pd, sectors, year):
     # Check, if dataset is consistent, or sectors are missing
-    _sectors = ["IronSteel", "Minerals", "Chemical", "PulpPaper", "AllManuf"]
     _dfs = []
 
-    for _sector in _sectors:
+    for _sector in sectors+["AllManuf"]:
         _df = pd.read_excel(
-            "resources/NEFI-Export_test-all_sectors.xlsx",
-            sheet_name=_sector,
+            "resources/v2-NEFI-Scenario2a.xlsx",
+            sheet_name="Scenario2a-"+_sector,
             index_col=0,
             header=0,
         )
         _df = _df.select_dtypes(exclude=object) #.mul(8.760)  # GWyr to TWh <-- new input is in TWh
-        _df.drop("    Total", axis=0, inplace=True, errors="ignore")
-        _df = _df[[year.value]]  # Filter to selected year
+        _df = _df[[int(year.value)]]  # Filter to selected year
         _df = energy_inputs_harmonization(_df)  # Harmonize inputs
+        _df.drop("Total", axis=0, inplace=True, errors="ignore")
         _df.columns = [_sector]
         _dfs.append(_df)
 
     all_sectors_and_sum = pd.concat(_dfs, axis = 1)
-    all_sectors_and_sum["manual sum"] = all_sectors_and_sum[["IronSteel", "Minerals", "Chemical", "PulpPaper"]].sum(axis = 1)
+    all_sectors_and_sum["manual sum"] = all_sectors_and_sum[sectors].sum(axis = 1)
     all_sectors_and_sum[["manual sum", "AllManuf"]].plot.bar(figsize = (15,5),title = "Subsectors do not sum up to values of All Manifacturing [TWh/a] ")
     return
 
