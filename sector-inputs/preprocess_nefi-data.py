@@ -95,7 +95,7 @@ def _(dd, fit_grade_dict: dict[str, float], mo):
         raise Exception(f"DATA ERROR: no data of Physical output for sector {dd.value} available in JRC IDEE datasource.")
     else:
         fit_grade_slider = mo.ui.slider(
-            start=1, stop=8, step=1,
+            start=0, stop=8, step=1,
             value=fit_grade_dict[dd.value],
             label="Grade for polynomial fit",
         )
