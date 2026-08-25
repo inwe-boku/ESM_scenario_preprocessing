@@ -50,7 +50,7 @@ def _(mo):
     return
 
 
-@app.cell(hide_code=True)
+@app.cell
 def _(mo):
     year = mo.ui.dropdown(options = ["2025", "2050"], label = "Year of evaluation")
     return (year,)
@@ -62,7 +62,7 @@ def _(mo, year):
     return
 
 
-@app.cell(hide_code=True)
+@app.cell
 def _(pd, year):
     # Import file and combine some sectors into one to be more consistent with NACE-Codes. - unit: Mt/a
 
@@ -234,11 +234,11 @@ def _(mo):
     return
 
 
-@app.cell(hide_code=True)
+@app.cell
 def _(energy_inputs_harmonization, pd):
     # Import NEFi values, convert unit to TWh and harmonize with pypsa-energy inputs
-    nefi_total_industry_fe = pd.read_csv("resources/export_nefi_total_fed.csv", index_col=0, header = 0, decimal = ",")
-    nefi_fe = nefi_total_industry_fe.select_dtypes(exclude=object).mul(8.760) # GWyr to TWh
+    nefi_total_industry_fe = pd.read_excel("resources/v2-NEFI-Scenario2a.xlsx", sheet_name="Scenario2a-AllManuf", index_col=0, header = 0, decimal = ",")
+    nefi_fe = nefi_total_industry_fe.select_dtypes(exclude=object) #.mul(8.760) # GWyr to TWh <-- new input is in TWh
     nefi_total_industry_fe_in_pypsa = energy_inputs_harmonization(nefi_fe)
     return (nefi_total_industry_fe_in_pypsa,)
 
@@ -258,7 +258,7 @@ def _(
         _industrial_energy_demand.drop(_list, axis = 1, inplace = True)
     _industrial_energy_demand = _industrial_energy_demand.T
     _total_demand_pypsa_at = _industrial_energy_demand.filter(regex = "AT", axis = 1).sum(axis = 1)
-    _total_demand_nefi = nefi_total_industry_fe_in_pypsa[year.value]
+    _total_demand_nefi = nefi_total_industry_fe_in_pypsa[int(year.value)]
     # combine total_demand_pypsa_at and total_demand_nefi to one dataset and create a bar-plot to compare the values of the two datasources.
     total_demand_comparison = pd.DataFrame({
         "PyPSA-AT": _total_demand_pypsa_at,
@@ -283,9 +283,9 @@ def _(mo):
     return
 
 
-@app.cell(hide_code=True)
+@app.cell
 def _(mo):
-    nefi_sector = mo.ui.dropdown(options = ["AllManuf","IronSteel", "Minerals", "Chemical", "PulpPaper"], value= "AllManuf", label = "Industry Sector ")
+    nefi_sector = mo.ui.dropdown(options = ["AllManuf","IronSteel", "Chemical", "PulpPaper", "NonMetalicMinerals", "Machinery", "NonFerrousMetals", "FoodAndBeverages", "Wood", "Textiles", "NonSpecifiedIndustry", "Construction", "Mining"], value= "AllManuf", label = "Industry Sector ")
     return (nefi_sector,)
 
 
@@ -295,11 +295,15 @@ def _(mo, nefi_sector):
     return
 
 
-@app.cell(hide_code=True)
-def _(nefi_sector, pd):
-    nefis = pd.read_excel("resources/NEFI-Export_test-all_sectors.xlsx", sheet_name=nefi_sector.value, index_col=0, header=0)
-    nefis = nefis.select_dtypes(exclude=object).mul(8.760) # GWyr to TWh
-    nefis.drop("    Total", axis = 0, inplace=True)
+@app.cell
+def _(energy_inputs_harmonization, nefi_sector, pd):
+    nefis = pd.read_excel("resources/v2-NEFI-Scenario2a.xlsx", sheet_name="Scenario2a-"+nefi_sector.value, index_col=0, header=0)
+    nefis = nefis.select_dtypes(exclude=object) #.mul(8.760) # GWyr to TWh <-- new intput is in TWh
+    nefis = energy_inputs_harmonization(nefis)
+    if "Total" in nefis.index: 
+        nefis.drop("Total", axis = 0, inplace=True)
+    if "losses" in nefis.index:
+        nefis.drop("losses", axis = 0, inplace=True)
     return (nefis,)
 
 
@@ -309,23 +313,23 @@ def _(nefi_sector, nefis):
     return
 
 
-@app.cell(hide_code=True)
+@app.cell
 def _(energy_inputs_harmonization, pd, year):
-    sectors = ["IronSteel", "Minerals", "Chemical", "PulpPaper"]
+    sectors = ["IronSteel", "Chemical", "PulpPaper", "NonMetalicMinerals", "Machinery", "NonFerrousMetals", "FoodAndBeverages", "Wood", "Textiles", "NonSpecifiedIndustry", "Construction", "Mining"]
     dfs = []
 
     for sector in sectors:
         df = pd.read_excel(
-            "resources/NEFI-Export_test-all_sectors.xlsx",
-            sheet_name=sector,
+            "resources/v2-NEFI-Scenario2a.xlsx",
+            sheet_name="Scenario2a-"+sector,
             index_col=0,
             header=0,
         )
-        df = df.select_dtypes(exclude=object).mul(8.760)  # GWyr to TWh
-        df.drop("    Total", axis=0, inplace=True, errors="ignore")
-        df = df[[year.value]]  # Filter to selected year
+        df = df.select_dtypes(exclude=object) #.mul(8.760)  # GWyr to TWh <-- new input is in TWh
+        df = df[[int(year.value)]]  # Filter to selected year
         df = energy_inputs_harmonization(df)  # Harmonize inputs
         df.columns = [sector]  # Rename column to sector name
+        df.drop("Total", axis=0, inplace=True, errors="ignore")
         dfs.append(df)
 
     # Combine all sectors
@@ -333,7 +337,7 @@ def _(energy_inputs_harmonization, pd, year):
     return (nefi_inputs_by_sector,)
 
 
-@app.cell(hide_code=True)
+@app.cell
 def _(go, nefi_inputs_by_sector, year):
     # Create Sankey diagram
     _carriers = nefi_inputs_by_sector.index.tolist()
@@ -378,7 +382,7 @@ def _(energy_inputs_harmonization, pd, year):
             index_col=0,
             header=0,
         )
-        _df = _df.select_dtypes(exclude=object).mul(8.760)  # GWyr to TWh
+        _df = _df.select_dtypes(exclude=object) #.mul(8.760)  # GWyr to TWh <-- new input is in TWh
         _df.drop("    Total", axis=0, inplace=True, errors="ignore")
         _df = _df[[year.value]]  # Filter to selected year
         _df = energy_inputs_harmonization(_df)  # Harmonize inputs
