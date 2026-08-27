@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.23.16"
+__generated_with = "0.24.0"
 app = marimo.App(width="medium")
 
 
@@ -25,7 +25,7 @@ def _(mo):
 @app.cell
 def _(pypsa):
     base_folder = "resources/flos_potential/"
-    local_potentials_folder = base_folder + "at_klien_potentials/networks/"
+    local_potentials_folder = base_folder + "at_klien_technical_potentials/networks/"
     general_potentials_folder = base_folder + "at_general_potentials/networks/"
 
     filename = "base_s_adm__none_2050_final.nc"
@@ -48,13 +48,13 @@ def _(general_n, local_n, pd):
 
 @app.cell
 def _(combined):
-    combined["difference [local - general]"] = combined["local_p_nom_max"] - combined["general_p_nom_max"]
+    combined["difference [(local - general) / local]"] = ((combined["local_p_nom_max"] - combined["general_p_nom_max"]) / combined["local_p_nom_max"])
     return
 
 
 @app.cell
 def _(combined):
-    combined["difference [local - general]"]
+    combined["difference [(local - general) / local]"]
     return
 
 
@@ -70,15 +70,22 @@ def _(combined, px):
         geojson=regions_geojson,
         locations="bus",
         featureidkey="properties.name",
-        color="difference [local - general]",
+        color="difference [(local - general) / local]", # local, not difference
         color_continuous_scale="RdBu",
         color_continuous_midpoint=0,
         map_style="outdoors",
         zoom=5.5,
         center={"lat": 47.5, "lon": 14.2},
         opacity=0.75,
+        hover_name="bus",
+        hover_data=["local_p_nom_max", "general_p_nom_max","difference [(local - general) / local]"]
     )
     fig.write_html("geographic_comparison_p_max_pu.html")
+    return
+
+
+@app.cell
+def _():
     return
 
 
