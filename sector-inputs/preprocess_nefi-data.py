@@ -34,9 +34,43 @@ def _():
     return (fp,)
 
 
-@app.cell
-def _(mo):
+app._unparsable_cell(
+    r"""
+    # map the NEFI sectors (keys) to the sheet name of the corresponding JRC sectors
     sheet_name_dict: dict[str, str] = {
+        "IronSteel": "ISI", # "Iron and steel"
+        "NonFerrousMetals": "NFM", # "Non-ferrous metals"
+        "Chemical": "CHI", # "Chemical industry"
+        "NonMetalicMinerals": "NMM", # "Non-metallic mineral products"
+        "PulpPaper": "PPA", # "Pulp, paper and printing"
+        "FoodAndBeverages": "FBT", # "Food, beverages and tobacco"
+        "Transport equipment": "TRE",
+        "Machinery": "MAE", # "Machinery equipment"
+        "Textiles": "TEL", # "Textiles and leather"
+        "Wood": "WWP", # "Wood and wood products"
+        "NonSpecifiedIndustry": "OIS", # "Other industrial sectors"
+        "Construction": "ISI", # "Iron and steel"
+        "Mining": "OIS" # "Other industrial sectors"
+                              }
+    # map the regression grade to the corresponding NEFI sectors
+    fit_grade_dict : dict[str, float] = {
+        "IronSteel": 3,
+        "NonFerrousMetals": 2,
+        "Chemical": 0,
+        "NonMetalicMinerals": 0,
+        "PulpPaper": 0,
+        "FoodAndBeverages": 4,
+        "Transport equipment": 2,
+        "Machinery": 2,
+        "Textiles": 3,
+        "Wood": 2,
+        "NonSpecifiedIndustry": 4,
+        "Construction": 3,
+        "Mining": 4
+    }
+
+    # original mapping of JRC sectors to their JRC-IDEES sheet name
+    jrc_sector_to_sheet_name_dict: dict[str, str] = {
         "Iron and steel": "ISI",
         "Non-ferrous metals": "NFM",
         "Chemical industry": "CHI",
@@ -48,23 +82,31 @@ def _(mo):
         "Textiles and leather": "TEL",
         "Wood and wood products": "WWP",
         "Other industrial sectors": "OIS"
-                                      }
-    fit_grade_dict : dict[str, float] = {
-        "Iron and steel": 3,
-        "Non-ferrous metals": 2,
-        "Chemical industry": 0,
-        "Non-metallic mineral products": 0,
-        "Pulp, paper and printing": 0,
-        "Food, beverages and tobacco": 4,
-        "Transport equipment": 2,
-        "Machinery equipment": 2,
-        "Textiles and leather": 3,
-        "Wood and wood products": 2,
-        "Other industrial sectors": 4
     }
+
+    # map the NEFI sectors to their corresponding JRC sector
+    nefi_sector_to_jrc_sector_dict: dict[str, str] = {
+        "IronSteel": "Iron and steel",
+        "NonFerrousMetals": "Non-ferrous metals",
+        "Chemical": "Chemical industry",
+        "NonMetalicMinerals": "Non-metallic mineral products",
+        "PulpPaper": "Pulp, paper and printing",
+        "FoodAndBeverages": "Food, beverages and tobacco",
+        "Transport equipment": "Transport equipment",
+        "Machinery": "Machinery equipment",
+        "Textiles": "Textiles and leather",
+        "Wood": "Wood and wood products",
+        "NonSpecifiedIndustry": "Other industrial sectors",
+        "Construction": "Iron and steel",
+        "Mining": "Other industrial sectors"
+    }
+
+
     dd = mo.ui.dropdown(options=list(sheet_name_dict.keys()),
                                value = list(sheet_name_dict.keys())[0])
-    return dd, fit_grade_dict, sheet_name_dict
+    """,
+    name="_"
+)
 
 
 @app.cell(hide_code=True)
@@ -90,7 +132,7 @@ def _(mo):
 
 
 @app.cell
-def _(dd, fit_grade_dict: dict[str, float], mo):
+def _(dd, fit_grade_dict, mo):
     if dd.value in ["Non-ferrous metals", "Chemical industry", "Non-metallic mineral products"]:
         raise Exception(f"DATA ERROR: no data of Physical output for sector {dd.value} available in JRC IDEE datasource.")
     else:
@@ -104,7 +146,7 @@ def _(dd, fit_grade_dict: dict[str, float], mo):
 
 
 @app.cell
-def _(dd, fp, pd, sheet_name_dict: dict[str, str]):
+def _(dd, fp, pd, sheet_name_dict):
     _df = pd.read_excel(fp, sheet_name=sheet_name_dict[dd.value], index_col=0, header=0)
     physical_output = next((x for x in _df.index if isinstance(x, str) and x.startswith("Physical output (")), None)
     df_filtered = _df.loc[["Value added (M€2023)", physical_output]]
