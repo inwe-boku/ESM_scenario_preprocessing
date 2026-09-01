@@ -162,7 +162,6 @@ def _(demand_factor, demand_factor_2050, pd):
     demand_factor_with_2050 = pd.concat(
         [demand_factor, pd.Series({2050: demand_factor_2050})]
     )
-
     return (demand_factor_with_2050,)
 
 
@@ -183,8 +182,27 @@ def _(road_transport_scenario, scenario_dropdown):
     return
 
 
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ---
+    ### Funtion `get_transport_sector_technology_shares` holds the processing steps from that notebook
+    """)
+    return
+
+
 @app.cell
 def _():
+    from esm_scenario_preprocessing.input_preprocessing import get_transport_sector_technology_shares
+
+    return (get_transport_sector_technology_shares,)
+
+
+@app.cell
+def _(get_transport_sector_technology_shares):
+    get_transport_sector_technology_shares(
+        file_path="resources/netzero2040-times-pyam.xlsx", scenario="Low Demand"
+    )
     return
 
 
