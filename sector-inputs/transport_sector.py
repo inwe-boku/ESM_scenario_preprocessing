@@ -7,6 +7,7 @@ app = marimo.App(width="medium")
 @app.cell
 def _():
     import pandas as pd
+
     pd.options.plotting.backend = "plotly"
     import numpy as np
     import pyam
@@ -73,19 +74,23 @@ def _(pdf, scenario_dropdown):
 @app.cell
 def _(cars_absolute, math, pd):
     cars_absolute_numeric = cars_absolute.apply(pd.to_numeric, errors="coerce")
-    common_basis = cars_absolute_numeric.sum(axis = 0, skipna = True).loc[2023]
-    #technology_shares = cars_absolute_numeric.div(cars_absolute_numeric.sum(axis=0, skipna=True), axis=1)
-    if math.isclose(common_basis,0):
+    common_basis = cars_absolute_numeric.sum(axis=0, skipna=True).loc[2023]
+    # technology_shares = cars_absolute_numeric.div(cars_absolute_numeric.sum(axis=0, skipna=True), axis=1)
+    if math.isclose(common_basis, 0):
         raise Exception("Comparison-variable 'common_basis' is near zero. ")
-    technology_shares = cars_absolute_numeric.div(common_basis, axis = 1)
-    technology_shares.index = [f"{variable} Share" for variable in technology_shares.index]
+    technology_shares = cars_absolute_numeric.div(common_basis, axis=1)
+    technology_shares.index = [
+        f"{variable} Share" for variable in technology_shares.index
+    ]
     cars_absolute_with_shares = pd.concat([cars_absolute_numeric, technology_shares])
     return (cars_absolute_with_shares,)
 
 
 @app.cell
 def _(cars_absolute_with_shares):
-    cars_absolute_with_shares[2025] = cars_absolute_with_shares[[2021,2030]].mean(axis=1)
+    cars_absolute_with_shares[2025] = cars_absolute_with_shares[[2021, 2030]].mean(
+        axis=1
+    )
     cars_absolute_with_shares.filter(like="Share", axis=0)[[2025, 2030, 2040]]
     return
 
@@ -135,7 +140,9 @@ def _(demand_factor, np):
         degree: loocv_mse(demand_factor_years, demand_factor_values, degree)
         for degree in (1, 2, 3)
     }
-    demand_factor_best_degree = min(demand_factor_cv_errors, key=demand_factor_cv_errors.get)
+    demand_factor_best_degree = min(
+        demand_factor_cv_errors, key=demand_factor_cv_errors.get
+    )
     demand_factor_coeffs = np.polyfit(
         demand_factor_years, demand_factor_values, demand_factor_best_degree
     )
@@ -165,18 +172,26 @@ def _(demand_factor, demand_factor_2050, pd):
 
 @app.cell
 def _(cars_absolute_with_shares, demand_factor_with_2050):
-    technology_shares_2040 = cars_absolute_with_shares.filter(like="Share", axis=0)[2040]
+    technology_shares_2040 = cars_absolute_with_shares.filter(like="Share", axis=0)[
+        2040
+    ]
     technology_fractions_2040 = technology_shares_2040 / technology_shares_2040.sum()
     cars_absolute_with_shares.loc[technology_fractions_2040.index, 2050] = (
         technology_fractions_2040 * demand_factor_with_2050[2050]
     )
-    road_transport_scenario = cars_absolute_with_shares.filter(like="Share", axis=0)[[2025, 2030, 2040, 2050]]
+    road_transport_scenario = cars_absolute_with_shares.filter(like="Share", axis=0)[
+        [2025, 2030, 2040, 2050]
+    ]
     return (road_transport_scenario,)
 
 
 @app.cell
 def _(road_transport_scenario, scenario_dropdown):
-    road_transport_scenario.T.plot.area(stacked = True, title = f"Transport scenario for {scenario_dropdown.selected_key}", subtitle = f"Demand scenarios: {scenario_dropdown.value}")
+    road_transport_scenario.T.plot.area(
+        stacked=True,
+        title=f"Transport scenario for {scenario_dropdown.selected_key}",
+        subtitle=f"Demand scenarios: {scenario_dropdown.value}",
+    )
     return
 
 
@@ -191,14 +206,33 @@ def _(mo):
 
 @app.cell
 def _():
-    from esm_scenario_preprocessing.input_preprocessing import get_transport_sector_technology_shares
+    from esm_scenario_preprocessing.input_preprocessing import (
+        get_transport_sector_technology_shares,
+    )
 
     return (get_transport_sector_technology_shares,)
 
 
 @app.cell
 def _(get_transport_sector_technology_shares):
-    get_transport_sector_technology_shares(file_path="resources/netzero2040-times-pyam.xlsx", scenario="Low Demand")
+    low_demand = get_transport_sector_technology_shares(
+        file_path="resources/netzero2040-times-pyam.xlsx", scenario="Low Demand"
+    )
+    high_demand = get_transport_sector_technology_shares(
+        file_path="resources/netzero2040-times-pyam.xlsx", scenario="High Demand"
+    )
+    return high_demand, low_demand
+
+
+@app.cell
+def _(low_demand):
+    low_demand.T.plot.area()
+    return
+
+
+@app.cell
+def _(high_demand):
+    high_demand.T.plot.area()
     return
 
 
