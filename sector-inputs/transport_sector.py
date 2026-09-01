@@ -10,8 +10,6 @@ def _():
     pd.options.plotting.backend = "plotly"
     import numpy as np
     import pyam
-    import nomenclature
-    import matplotlib.pyplot as plt
     import math
     import marimo as mo
 
@@ -200,9 +198,7 @@ def _():
 
 @app.cell
 def _(get_transport_sector_technology_shares):
-    get_transport_sector_technology_shares(
-        file_path="resources/netzero2040-times-pyam.xlsx", scenario="Low Demand"
-    )
+    get_transport_sector_technology_shares(file_path="resources/netzero2040-times-pyam.xlsx", scenario="Low Demand")
     return
 
 
