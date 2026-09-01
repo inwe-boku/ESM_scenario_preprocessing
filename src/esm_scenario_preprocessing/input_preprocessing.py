@@ -107,9 +107,7 @@ def get_transport_sector_technology_shares(
     ).pivot_table(index="variable", columns="year", values="value", aggfunc="mean")
 
     # Missing values mean the technology has zero stock in that year, not unknown data.
-    cars_absolute_numeric = cars_absolute.apply(pd.to_numeric, errors="coerce").fillna(
-        0
-    )
+    cars_absolute_numeric = cars_absolute.apply(pd.to_numeric, errors="raise").fillna(0)
     common_basis = cars_absolute_numeric.sum(axis=0, skipna=True).loc[2023]
     if math.isclose(common_basis, 0):
         raise ValueError("Comparison-variable 'common_basis' is near zero.")
