@@ -55,7 +55,8 @@ def get_transport_sector_technology_shares(
     Filters passenger car stock (combustion/electric/fuel cell) for Austria from a
     pyam-valid IAMC scenario file, normalizes it against a fixed base year (2023) to
     get shares, and extrapolates the combined demand factor to 2050 via a polynomial
-    fit (degree chosen by leave-one-out cross-validation).
+    fit (degree chosen by leave-one-out cross-validation). These technology shares
+    then also include changes in demand factor if not summing up to 1.0.
 
     Inputs:
     ------
@@ -69,6 +70,12 @@ def get_transport_sector_technology_shares(
     df_out: pd.DataFrame
         technology share of the passenger car stock for years 2025, 2030, 2040, 2050,
         indexed by technology.
+
+    Note:
+    ----
+    The returned technology shares will not sum up to 1.0 for a specific year, if the
+    transport demand is not constant over time, relative to the base year (2003).
+    Changes in transport demand are reflected in the total technology shares.
     """
     if scenario not in TRANSPORT_SCENARIO_DEMAND_DICT:
         raise ValueError(
