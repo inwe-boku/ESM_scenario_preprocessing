@@ -16,14 +16,14 @@ nefi_to_pypsa_inputs_dict: dict[str, list[str]] = {
         "CH4",
         "Gas grid ix",
     ],
-    "hydrogen": ["Hydrogen, H2", "Hydrogen"],
+    "hydrogen": ["Hydrogen, H2", "Hydrogen", "H2"],
     "heat": ["District Heating", "Solar thermal"],
-    "naphtha": ["Oil"],
+    "naphtha": ["Oil", "Chem. Ind. Foss. Rohstoffe (ölbasiert)"],
     "ammonia": [],
     "methanol": [],
     "waste": ["Waste"],
     "losses": ["Transformation losses H2"],
-    "Total": ["Total", "Total Energy", "Total energy"],
+    "Total": ["Total", "Total Energy", "Total energy", "actual total"],
 }
 
 pypsa_combinations_for_nefi_inputs_dict: dict[str, list[str]] = {
