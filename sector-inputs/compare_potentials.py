@@ -10,8 +10,9 @@ def _():
     import pypsa
     import pandas as pd 
     import plotly.express as px
+    import json
 
-    return mo, pd, px, pypsa
+    return json, mo, pd, px, pypsa
 
 
 @app.cell(hide_code=True)
@@ -48,44 +49,52 @@ def _(general_n, local_n, pd):
 
 @app.cell
 def _(combined):
-    combined["difference [(local - general) / local]"] = ((combined["local_p_nom_max"] - combined["general_p_nom_max"]) / combined["local_p_nom_max"])
+    combined["difference [((general - local) / local) * 100]"] = ((combined["general_p_nom_max"] - combined["local_p_nom_max"])  / combined["local_p_nom_max"]) * 100
     return
 
 
 @app.cell
 def _(combined):
-    combined["difference [(local - general) / local]"]
+    combined
     return
 
 
 @app.cell
-def _(combined, px):
-    import json
+def _(combined):
+    combined["difference [((general - local) / local) * 100]"].describe()
+    return
 
+
+@app.cell
+def _(combined, json, px):
     with open("resources/flos_potential/regions_onshore_base_s_adm.geojson") as f:
         regions_geojson = json.load(f)
+
+    diff_col = "difference [((general - local) / local) * 100]"
+    max_abs_diff = combined[diff_col].abs().max()
 
     fig = px.choropleth_map(
         combined.reset_index(),
         geojson=regions_geojson,
         locations="bus",
         featureidkey="properties.name",
-        color="difference [(local - general) / local]", # local, not difference
+        color=diff_col,
         color_continuous_scale="RdBu",
         color_continuous_midpoint=0,
+        range_color=(-max_abs_diff, max_abs_diff),
         map_style="outdoors",
         zoom=5.5,
         center={"lat": 47.5, "lon": 14.2},
         opacity=0.75,
         hover_name="bus",
-        hover_data=["local_p_nom_max", "general_p_nom_max","difference [(local - general) / local]"]
+        hover_data=[
+            "local_p_nom_max",
+            "general_p_nom_max",
+            diff_col,
+        ],
+        title="Difference in p_nom_max (Technical potential)",
     )
-    fig.write_html("geographic_comparison_p_max_pu.html")
-    return
-
-
-@app.cell
-def _():
+    fig.write_html("geographic_comparison_technical_p_max_pu.html")
     return
 
 
