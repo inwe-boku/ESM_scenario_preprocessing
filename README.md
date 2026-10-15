@@ -55,9 +55,31 @@ pixi shell
 - `sector-inputs/`: collection of marimo notebooks processing scenario input data
 - `nefi_preprocessing/`: first pipeline step – harmonizes the raw NEFI (AIT) industry export into a standard long table (`repair_nefi.py`, see its own `README.md` for all rules and data quirks)
 
+## Industry workflow
+
+```mermaid
+flowchart LR
+    src[("NEFI export<br/>(AIT, xlsx)")] --> pre["Preprocessing<br/>repair_nefi.py<br/>(manual / AI pipeline)"]
+    pre --> chk{"Manual check<br/>checks + dropped_rows_log"}
+    chk -->|ok| eval["Evaluation<br/>analyze-nefi-inputs.py"]
+    chk -.->|issues| src
+    jrc[("JRC-IDEES<br/>(AT)")] --> jeval["JRC evaluation<br/>preprocess_nefi-data.py"]
+    eval --> proc["Processing NEFI<br/>with JRC data"]
+    jeval --> proc
+    proc --> out[("PyPSA-AT<br/>industry inputs")]
+```
+
+1. **Preprocessing:** `nefi_preprocessing/repair_nefi.py` harmonizes the raw NEFI export into the standard output file (see below).
+2. **Manual check:** review the `checks` and `dropped_rows_log` sheets and the open questions in `nefi_preprocessing/README.md`. Report source issues back to AIT.
+3. **Evaluation:** `sector-inputs/analyze-nefi-inputs.py` evaluates the NEFI scenarios.
+4. **JRC evaluation:** `sector-inputs/preprocess_nefi-data.py` evaluates JRC-IDEES data for Austria (added value vs. physical output).
+5. **Processing:** the NEFI data are combined with the JRC data to produce the PyPSA-AT industry inputs.
+
 ## NEFI standard output file
 
-`nefi_preprocessing/repair_nefi.py` reads the NEFI source workbook (tabs `Scenario 1` and `Scenario 2.a`) and writes the standard input for all following steps:
+`nefi_preprocessing/repair_nefi.py` is a script for use in an **AI pipeline**. An AI agent receives the NEFI source workbook, `repair_nefi.py` and the prompt in `nefi_preprocessing/prompt_for_nefi_inputs.txt`. It runs the script unchanged, formats the output, verifies the checks listed in the prompt and documents the result in a README. The script can also be run manually.
+
+The script reads the NEFI source workbook (tabs `Scenario 1` and `Scenario 2.a`) and writes the standard input for all following steps:
 
 ```bash
 pixi run python nefi_preprocessing/repair_nefi.py <source.xlsx> <output_dir>
