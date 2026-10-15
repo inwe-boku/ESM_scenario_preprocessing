@@ -1,0 +1,83 @@
+You work in the project INFRA-ENSHURE with AIT Austria. Turn the attached AIT/NEFI industry
+energy workbook (260831-industry-energy-demand-NEFI-POI-INFRAENSURE-Export.xlsx) into one
+machine-readable long table. Work offline on the attached file. Do not ask questions unless a
+check below fails.
+
+## Steps
+1. Copy the source xlsx into its own empty folder. Run the attached, unchanged script:
+   `python3 -I build.py <source.xlsx> <output_dir>`
+   It writes `NEFI_v3_energy_by_carrier_long.xlsx` with the sheets `data`, `checks` and
+   `dropped_rows_log`.
+2. Format every sheet: bold header row, freeze panes at A2, autofilter over the used range,
+   column width = longest value + 2 (min 10, max 60). Do not change any values.
+3. Verify (stop and report if any check fails):
+   - `data` has 2,860 rows (2 scenarios × 13 sectors × 10 carriers × 11 years), no empty
+     values, no negative values, unit always TWh.
+   - In `checks`, |diff_total| < 0.002 TWh for all 286 rows. The sum of the carriers must equal
+     AIT's "Total energy" for every scenario/sector/year.
+   - The gas check (`diff_gas`) fails only for Scenario1/Construction 2017–2040. This is a known
+     source quirk.
+   - Sc. 2.a: the sum of the 13 sectors equals the AllManuf "Total" (Scenario 2.a!C33:M33) in
+     every year.
+   - Hydrogen sum over sectors, TWh: Sc1 2025 0.268 / 2050 20.315; Sc2a 2025 1.222 / 2050 43.531.
+4. Write `README.md` documenting the source, table structure, mappings, all rules, checks, data
+   quirks and open questions listed below.
+5. Deliver the xlsx, README.md and build.py as files. Save the README to the project as
+   `claude/v3-energy-by-carrier-rules.md`.
+
+## Scope
+- Only the energy-by-carrier tables of tabs "Scenario 1" and "Scenario 2.a", columns A–M.
+- Excluded: the CO2-by-sector tables (right-hand side of both tabs), tabs "test" and "Economy",
+  and the "All Manufacturing Industries" block (it is an aggregate).
+- Scenarios: Scenario1 = POI_2026 in NEFI Lab; Scenario2a = ZEM in NEFI Lab.
+- Years: 2017, 2018, 2019, 2020, 2021, 2025, 2030, 2035, 2040, 2045, 2050. All values are
+  already in TWh. Keep full precision, never round, impute, interpolate or average.
+
+## Output table (sheet `data`)
+Columns: scenario | sector | carrier | unit | year | value. Every combination is present, with 0
+where a sector doesn't use a carrier. No subtotals or totals: summing the carriers of a sector
+gives AIT's "Total energy".
+
+Sectors: IronSteel, Chemical, PulpPaper, NonMetalicMinerals, Machinery, NonFerrousMetals,
+TransportEquipment, FoodAndBeverages, Wood, Textiles, NonSpecifiedIndustry, Construction, Mining.
+
+Carriers and their source labels:
+Waste; Biofuels; Electricity; ElectricityHP (El. for Heat Pumps / Electricity for HPs);
+SolarThermal; Coal; Oil; DistrictHeating; GasGridMix; Hydrogen.
+
+## Rules
+1. GasGridMix covers methane-type gases only: natural gas (first "Gas grid mix" or "CH4" row
+   inside AIT's table) + Bio-CH4/Biogas + Synth-CH4. It never contains hydrogen. Build it from
+   these component rows. Never copy the gas aggregate rows below the totals ("Gas grid mix",
+   "Gas grid ix", "Natural gas, Bio-CH4 and Syn-CH4"): outside IronSteel and Chemical they
+   include hydrogen. Use them only as a check.
+2. Hydrogen = the "Hydrogen" row inside AIT's table (directly after District Heating), in every
+   sector. It is total hydrogen demand: no distinction between hydrogen from the pipeline and
+   hydrogen made on site.
+3. Drop "El. for H2" and "Transformation losses H2" (IronSteel, Chemical). The hydrogen is
+   already counted under Hydrogen, so adding the electricity would double count. In the source,
+   El. for H2 = Hydrogen / 0.7 and El. for H2 = Hydrogen + losses.
+4. Drop the extra hydrogen rows. In Sc1 these are the "H2" rows below each total and the top
+   "Hydrogen" row in Chemical (row 43; its label is in column B). In Sc2a they are the
+   "Hydrogen" rows at the top of each block. They equal the gas aggregate × an assumed H2 share
+   of the gas grid, identical in every sector:
+   - Sc1: 10.9 % / 17.6 % / 32.3 % / 74.2 % / 100 % / 100 % (2025–2050)
+   - Sc2a: 0 / 0 / 27.7 % / 93.4 % / 86.5 % / 75.5 %
+   They are not part of AIT's totals.
+5. Drop every "Total energy" row, the gas aggregate rows, and the second, identical "Hydrogen"
+   row below the IronSteel total.
+6. In Sc1 Construction, the row labelled "Gas grid mix" below the total actually contains the H2
+   share values. Ignore it; GasGridMix is built from components.
+
+## Data quirks to document (do not correct)
+- Sc1 Chemical breaks between 2025 and 2030: Waste, Coal and Oil drop to 0, Electricity falls
+  from 5.48 to 2.20 TWh, District Heating rises from 0.70 to 2.26 TWh. AIT note: for Chem and
+  NMM, "Total E Dem." now points to the sector tabs.
+- From 2030, the Sc1 AllManuf block is 3–7 TWh above the sum of the sectors; it was not updated.
+- Sc2a IronSteel CH4 2050 = −0.005 in the source. The resulting GasGridMix is positive (4.025).
+- Sc1 TransportEquipment has "H2" in the unit column of a dropped row.
+
+## Open questions for AIT (list in README)
+1. What do the H2 share-of-gas-grid rows mean, and who set the shares?
+2. Are the Sc1 Chemical break between 2025 and 2030 and the outdated Sc1 AllManuf block
+   intended?

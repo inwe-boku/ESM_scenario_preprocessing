@@ -10,6 +10,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
   "pandas>=1.0.0",
+  "openpyxl>=3.1",
   "pyam-iamc>=2.0.0",
   "marimo>=0.7,<1.0",
   "nomenclature-iamc>=0.29",
