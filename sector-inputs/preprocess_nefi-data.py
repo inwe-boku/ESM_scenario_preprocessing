@@ -142,9 +142,9 @@ def _(mo):
 @app.cell
 def _(dd, fit_grade_dict: dict[str, float], mo):
     if dd.value in [
-        "Non-ferrous metals",
-        "Chemical industry",
-        "Non-metallic mineral products",
+        "NonFerrousMetals",
+        "Chemical",
+        "NonMetalicMinerals",
     ]:
         raise Exception(
             f"DATA ERROR: no data of Physical output for sector {dd.value} available in JRC IDEE datasource."
