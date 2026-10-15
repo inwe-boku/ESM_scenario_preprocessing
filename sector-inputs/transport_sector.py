@@ -9,12 +9,9 @@ def _():
     import pandas as pd
 
     pd.options.plotting.backend = "plotly"
-    import numpy as np
-    import pyam
-    import math
     import marimo as mo
 
-    return math, mo, np, pd, pyam
+    return (mo,)
 
 
 @app.cell(hide_code=True)
@@ -30,176 +27,17 @@ def _(mo):
     return
 
 
-@app.cell
-def _(pyam):
-    pdf = pyam.IamDataFrame("resources/netzero2040-times-pyam.xlsx")
-    return (pdf,)
-
-
-@app.cell
-def _(mo):
-    # Dropdown for Scenarios:
-    dropdown_dict = {
-        "High demand": [
-            "NetZero2040 high-import/high-demand base",
-            "NetZero2040 low-import/high-demand base",
-        ],
-        "Low demand": [
-            "NetZero2040 high-import/low-demand base",
-            "NetZero2040 low-import/low-demand base",
-        ],
-    }
-
-    scenario_dropdown = mo.ui.dropdown(
-        options=dropdown_dict, value="High demand", label="Demand scenario"
-    )
-    scenario_dropdown
-    return (scenario_dropdown,)
-
-
-@app.cell
-def _(pdf, scenario_dropdown):
-    cars_absolute = pdf.filter(
-        scenario=scenario_dropdown.value,
-        variable=[
-            "Stock|Cars|Passenger|Combustion",
-            "Stock|Cars|Passenger|Electric",
-            "Stock|Cars|Passenger|Fuel Cell",
-        ],
-        region="Austria",
-    ).pivot_table(index="variable", columns="year", values="value", aggfunc="mean")
-    return (cars_absolute,)
-
-
-@app.cell
-def _(cars_absolute, math, pd):
-    cars_absolute_numeric = cars_absolute.apply(pd.to_numeric, errors="coerce")
-    common_basis = cars_absolute_numeric.sum(axis=0, skipna=True).loc[2023]
-    # technology_shares = cars_absolute_numeric.div(cars_absolute_numeric.sum(axis=0, skipna=True), axis=1)
-    if math.isclose(common_basis, 0):
-        raise Exception("Comparison-variable 'common_basis' is near zero. ")
-    technology_shares = cars_absolute_numeric.div(common_basis, axis=1)
-    technology_shares.index = [
-        f"{variable} Share" for variable in technology_shares.index
-    ]
-    cars_absolute_with_shares = pd.concat([cars_absolute_numeric, technology_shares])
-    return (cars_absolute_with_shares,)
-
-
-@app.cell
-def _(cars_absolute_with_shares):
-    cars_absolute_with_shares[2025] = cars_absolute_with_shares[[2021, 2030]].mean(
-        axis=1
-    )
-    cars_absolute_with_shares.filter(like="Share", axis=0)[[2025, 2030, 2040]]
-    return
-
-
-@app.cell
-def _(cars_absolute_with_shares):
-    demand_factor = cars_absolute_with_shares.filter(like="Share", axis=0)[
-        [2021, 2023, 2025, 2030, 2040]
-    ].sum(axis=0)
-    return (demand_factor,)
-
-
-@app.cell
-def _(demand_factor):
-    demand_factor
-    return
-
-
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## Extrapolating `demand_factor` to 2050
+    ## Projection to 2050
+    - shares are normalized against the 2023 total stock (`demand_factor` = sum of shares per year)
     - fit polynomial regressions of degree 1, 2 and 3 to the known `demand_factor` values (2021-2040)
     - pick the degree with the lowest leave-one-out cross-validation (LOOCV) error
-    - evaluate the selected polynomial at year 2050 to obtain the estimate
-    - Allocating the 2050 demand factor across technologies keeps the 2040 technology mix unchanged
-    """)
-    return
+    - evaluate the selected polynomial at 2025, 2035, 2045 and 2050; negative values are cut at 0
+    - technology mix is interpolated linearly between known years; the 2040 mix is kept for 2050
 
-
-@app.cell
-def _(demand_factor, np):
-    def loocv_mse(years, values, degree: int) -> float:
-        squared_errors = []
-        for i in range(len(years)):
-            train_years = np.delete(years, i)
-            train_values = np.delete(values, i)
-            coeffs = np.polyfit(train_years, train_values, degree)
-            prediction = np.polyval(coeffs, years[i])
-            squared_errors.append((prediction - values[i]) ** 2)
-        return float(np.mean(squared_errors))
-
-    demand_factor_years = demand_factor.index.to_numpy(dtype=float)
-    demand_factor_values = demand_factor.to_numpy(dtype=float)
-
-    demand_factor_cv_errors = {
-        degree: loocv_mse(demand_factor_years, demand_factor_values, degree)
-        for degree in (1, 2, 3)
-    }
-    demand_factor_best_degree = min(
-        demand_factor_cv_errors, key=demand_factor_cv_errors.get
-    )
-    demand_factor_coeffs = np.polyfit(
-        demand_factor_years, demand_factor_values, demand_factor_best_degree
-    )
-    demand_factor_2050 = float(np.polyval(demand_factor_coeffs, 2050))
-    return (
-        demand_factor_2050,
-        demand_factor_best_degree,
-        demand_factor_cv_errors,
-    )
-
-
-@app.cell
-def _(demand_factor_2050, demand_factor_best_degree, demand_factor_cv_errors):
-    print(f"LOOCV MSE per degree: {demand_factor_cv_errors}")
-    print(f"Selected regression degree: {demand_factor_best_degree}")
-    print(f"Estimated demand_factor for 2050: {demand_factor_2050:.4f}")
-    return
-
-
-@app.cell
-def _(demand_factor, demand_factor_2050, pd):
-    demand_factor_with_2050 = pd.concat(
-        [demand_factor, pd.Series({2050: demand_factor_2050})]
-    )
-    return (demand_factor_with_2050,)
-
-
-@app.cell
-def _(cars_absolute_with_shares, demand_factor_with_2050):
-    technology_shares_2040 = cars_absolute_with_shares.filter(like="Share", axis=0)[
-        2040
-    ]
-    technology_fractions_2040 = technology_shares_2040 / technology_shares_2040.sum()
-    cars_absolute_with_shares.loc[technology_fractions_2040.index, 2050] = (
-        technology_fractions_2040 * demand_factor_with_2050[2050]
-    )
-    road_transport_scenario = cars_absolute_with_shares.filter(like="Share", axis=0)[
-        [2025, 2030, 2040, 2050]
-    ]
-    return (road_transport_scenario,)
-
-
-@app.cell
-def _(road_transport_scenario, scenario_dropdown):
-    road_transport_scenario.T.plot.area(
-        stacked=True,
-        title=f"Transport scenario for {scenario_dropdown.selected_key}",
-        subtitle=f"Demand scenarios: {scenario_dropdown.value}",
-    )
-    return
-
-
-@app.cell(hide_code=True)
-def _(mo):
-    mo.md(r"""
-    ---
-    ### Funtion `get_transport_sector_technology_shares` holds the processing steps from that notebook
+    Function `get_transport_sector_technology_shares` holds these processing steps.
     """)
     return
 
@@ -207,32 +45,41 @@ def _(mo):
 @app.cell
 def _():
     from esm_scenario_preprocessing.input_preprocessing import (
+        TRANSPORT_SCENARIO_DEMAND_DICT,
         get_transport_sector_technology_shares,
     )
 
-    return (get_transport_sector_technology_shares,)
+    return TRANSPORT_SCENARIO_DEMAND_DICT, get_transport_sector_technology_shares
 
 
 @app.cell
-def _(get_transport_sector_technology_shares):
-    low_demand = get_transport_sector_technology_shares(
-        file_path="resources/netzero2040-times-pyam.xlsx", scenario="Low Demand"
+def _(TRANSPORT_SCENARIO_DEMAND_DICT, mo):
+    scenario_dropdown = mo.ui.dropdown(
+        options=list(TRANSPORT_SCENARIO_DEMAND_DICT),
+        value="High Demand",
+        label="Demand scenario",
     )
-    high_demand = get_transport_sector_technology_shares(
-        file_path="resources/netzero2040-times-pyam.xlsx", scenario="High Demand"
+    scenario_dropdown
+    return (scenario_dropdown,)
+
+
+@app.cell
+def _(get_transport_sector_technology_shares, scenario_dropdown):
+    road_transport_scenario = get_transport_sector_technology_shares(
+        file_path="resources/netzero2040-times-pyam.xlsx",
+        scenario=scenario_dropdown.value,
     )
-    return high_demand, low_demand
+    road_transport_scenario
+    return (road_transport_scenario,)
 
 
 @app.cell
-def _(low_demand):
-    low_demand.T.plot.area()
-    return
-
-
-@app.cell
-def _(high_demand):
-    high_demand.T.plot.area()
+def _(TRANSPORT_SCENARIO_DEMAND_DICT, road_transport_scenario, scenario_dropdown):
+    road_transport_scenario.T.plot.area(
+        stacked=True,
+        title=f"Transport scenario for {scenario_dropdown.value}",
+        subtitle=f"Demand scenarios: {TRANSPORT_SCENARIO_DEMAND_DICT[scenario_dropdown.value]}",
+    )
     return
 
 
