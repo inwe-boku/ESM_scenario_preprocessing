@@ -7,21 +7,19 @@ app = marimo.App(width="medium")
 @app.cell
 def _():
     import pandas as pd
-    import numpy as np
-    import pyam
-    import nomenclature
-    import matplotlib.pyplot as plt
-    import math
+
+    pd.options.plotting.backend = "plotly"
     import marimo as mo
 
-    return math, mo, pd, pyam
+    return (mo,)
 
 
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    # Share of cars in transport sector
-    - **scenarios** all demand and imports, base-scenarios
+    # Change in transport demand & share of cars in transport sector
+    > Data source: Netzero2040 - Scenarios: Data repository [Dataset]. Zenodo. https://doi.org/10.5281/zenodo.14051038
+    - **scenarios** base-scenarios – config choice between low-demand scenarios and high-demand scenarios
     - **variables:** "Stock|Cars|Passenger|Combustion", "Stock|Cars|Passenger|Electric", "Stock|Cars|Passenger|Fuel Cell"
     - stick to a common basis for calculating shares to account for changing demand in transport sector
     - could be adapted to get a relative share per year without accounting for transport demand change
@@ -29,40 +27,59 @@ def _(mo):
     return
 
 
-@app.cell
-def _(pyam):
-    pdf = pyam.IamDataFrame("resources/netzero2040-times-pyam.xlsx")
-    return (pdf,)
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## Projection to 2050
+    - shares are normalized against the 2023 total stock (`demand_factor` = sum of shares per year)
+    - fit polynomial regressions of degree 1, 2 and 3 to the known `demand_factor` values (2021-2040)
+    - pick the degree with the lowest leave-one-out cross-validation (LOOCV) error
+    - evaluate the selected polynomial at 2025, 2035, 2045 and 2050; negative values are cut at 0
+    - technology mix is interpolated linearly between known years; the 2040 mix is kept for 2050
+
+    Function `get_transport_sector_technology_shares` holds these processing steps.
+    """)
+    return
 
 
 @app.cell
-def _(pdf):
-    cars_absolute = pdf.filter(scenario = ["NetZero2040 high-import/high-demand base",
-                           "NetZero2040 high-import/low-demand base",
-                           "NetZero2040 low-import/high-demand base",
-                           "NetZero2040 low-import/low-demand base"],
-               variable = ["Stock|Cars|Passenger|Combustion", "Stock|Cars|Passenger|Electric", "Stock|Cars|Passenger|Fuel Cell"],
-               region = "Austria").pivot_table(index = "variable", columns =  "year", values = "value", aggfunc = "mean")
-    return (cars_absolute,)
+def _():
+    from esm_scenario_preprocessing.input_preprocessing import (
+        TRANSPORT_SCENARIO_DEMAND_DICT,
+        get_transport_sector_technology_shares,
+    )
+
+    return TRANSPORT_SCENARIO_DEMAND_DICT, get_transport_sector_technology_shares
 
 
 @app.cell
-def _(cars_absolute, math, pd):
-    cars_absolute_numeric = cars_absolute.apply(pd.to_numeric, errors="coerce")
-    common_basis = cars_absolute_numeric.sum(axis = 0, skipna = True).loc[2023]
-    #technology_shares = cars_absolute_numeric.div(cars_absolute_numeric.sum(axis=0, skipna=True), axis=1)
-    if math.isclose(common_basis,0):
-        raise Exception("Comparison-variable 'common_basis' is near zero. ")
-    technology_shares = cars_absolute_numeric.div(common_basis, axis = 1)
-    technology_shares.index = [f"{variable} Share" for variable in technology_shares.index]
-    cars_absolute_with_shares = pd.concat([cars_absolute_numeric, technology_shares])
-    return (cars_absolute_with_shares,)
+def _(TRANSPORT_SCENARIO_DEMAND_DICT, mo):
+    scenario_dropdown = mo.ui.dropdown(
+        options=list(TRANSPORT_SCENARIO_DEMAND_DICT),
+        value="High Demand",
+        label="Demand scenario",
+    )
+    scenario_dropdown
+    return (scenario_dropdown,)
 
 
 @app.cell
-def _(cars_absolute_with_shares):
-    cars_absolute_with_shares[2025] = cars_absolute_with_shares[[2021,2030]].mean(axis=1)
-    cars_absolute_with_shares.filter(like = "Share", axis = 0)[[2025,2030,2040]]
+def _(get_transport_sector_technology_shares, scenario_dropdown):
+    road_transport_scenario = get_transport_sector_technology_shares(
+        file_path="resources/netzero2040-times-pyam.xlsx",
+        scenario=scenario_dropdown.value,
+    )
+    road_transport_scenario
+    return (road_transport_scenario,)
+
+
+@app.cell
+def _(TRANSPORT_SCENARIO_DEMAND_DICT, road_transport_scenario, scenario_dropdown):
+    road_transport_scenario.T.plot.area(
+        stacked=True,
+        title=f"Transport scenario for {scenario_dropdown.value}",
+        subtitle=f"Demand scenarios: {TRANSPORT_SCENARIO_DEMAND_DICT[scenario_dropdown.value]}",
+    )
     return
 
 
