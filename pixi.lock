@@ -1776,13 +1776,13 @@ packages:
 - pypi: ./
   name: esm-scenario-preprocessing
   version: 0.1.0
-  sha256: a74c074e47040a4032c88851ffdd663613cec5b429fd8922332ac48d208e5659
+  sha256: bed29ad8feb5c5c80060d29969c0009adeea56b7dc7dbcf727c634e8eaf5d0ea
   requires_dist:
   - pandas>=1.0.0
   - pyam-iamc>=2.0.0
   - marimo>=0.7,<1.0
   - nomenclature-iamc>=0.29
-  - plotly>=5.0
+  - plotly>=5.23
   - pypsa>=1.2.4,<2
   requires_python: '>=3.10'
 - pypi: https://files.pythonhosted.org/packages/c1/8b/5fe2cc11fee489817272089c4203e679c63b570a5aaeb18d852ae3cbba6a/et_xmlfile-2.0.0-py3-none-any.whl

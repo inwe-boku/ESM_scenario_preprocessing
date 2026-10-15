@@ -9,13 +9,19 @@ app = marimo.App(
 
 @app.cell
 def _():
+    from pathlib import Path
+
     import marimo as mo
     import pandas as pd
     import plotly.graph_objects as go
+
     from esm_scenario_preprocessing.harmonization_helpers import (
         energy_inputs_harmonization,
         pypsa_combinations_for_nefi_inputs_dict,
     )
+
+    # plots are exported here; create it up front so write_html never fails
+    Path("outputs_workshop").mkdir(exist_ok=True)
 
     return (
         energy_inputs_harmonization,
@@ -24,6 +30,35 @@ def _():
         pd,
         pypsa_combinations_for_nefi_inputs_dict,
     )
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    # Workshop mode: for the sector bar plots (used in presentations) the 2025
+    # values must be identical across scenarios, so 2025 is always taken from
+    # Scenario1. Both Scenario1 and Scenario2a are plotted and saved automatically,
+    # and the plot title is set by hand via `workshop_title`.
+    workshop_switch = mo.ui.switch(label="Workshop")
+    workshop_title_placeholder = "Write the desired title in here."
+    workshop_title = mo.ui.text(
+        value=workshop_title_placeholder,
+        label="Workshop plot title",
+        full_width=True,
+    )
+    return workshop_switch, workshop_title, workshop_title_placeholder
+
+
+@app.cell(hide_code=True)
+def _(mo, workshop_switch, workshop_title):
+    mo.vstack(
+        [
+            mo.hstack(
+                [workshop_switch, mo.md(f"Workshop mode: {workshop_switch.value}")]
+            ),
+            workshop_title,
+        ]
+    )
+    return
 
 
 @app.cell(hide_code=True)
@@ -52,7 +87,7 @@ def _(mo):
 
 @app.cell
 def _(mo):
-    year = mo.ui.dropdown(options = ["2025", "2050"], label = "Year of evaluation")
+    year = mo.ui.dropdown(options=["2025", "2050"], label="Year of evaluation")
     return (year,)
 
 
@@ -66,27 +101,53 @@ def _(mo, year):
 def _(pd, year):
     # Import file and combine some sectors into one to be more consistent with NACE-Codes. - unit: Mt/a
 
-    industrial_production = pd.read_csv(f"resources/pypsa_industry_files/industrial_production_per_country_tomorrow_{year.value}-modified.csv", index_col = 0) /1e3
+    industrial_production = (
+        pd.read_csv(
+            f"resources/pypsa_industry_files/industrial_production_per_country_tomorrow_{year.value}-modified.csv",
+            index_col=0,
+        )
+        / 1e3
+    )
     industrial_production.index.names = ["Mt/a"]
 
     pypsa_sectors_to_combine: dict = {
         "Pulp and Paper production": ["Pulp production", "Paper production"],
-        "Non-metallic mineral products production": ["Cement", "Ceramics & other NMM", "Glass production"],
-        "Iron and Steel": ["Electric arc", "Integrated steelworks", "DRI + Electric arc"],
-        "Basic metals except Iron and Steel": ["Aluminium - primary production", "Aluminium - secondary production", "Other non-ferrous metals"],
-        "HVC including recycling": ["HVC", "HVC (chemical recycling)", "HVC (mechanical recycling)"]
+        "Non-metallic mineral products production": [
+            "Cement",
+            "Ceramics & other NMM",
+            "Glass production",
+        ],
+        "Iron and Steel": [
+            "Electric arc",
+            "Integrated steelworks",
+            "DRI + Electric arc",
+        ],
+        "Basic metals except Iron and Steel": [
+            "Aluminium - primary production",
+            "Aluminium - secondary production",
+            "Other non-ferrous metals",
+        ],
+        "HVC including recycling": [
+            "HVC",
+            "HVC (chemical recycling)",
+            "HVC (mechanical recycling)",
+        ],
     }
 
     for combined_sector, sector_list in pypsa_sectors_to_combine.items():
-        industrial_production[combined_sector] = industrial_production[sector_list].sum(axis = 1)
-        industrial_production.drop(sector_list, axis = 1, inplace=True)
+        industrial_production[combined_sector] = industrial_production[sector_list].sum(
+            axis=1
+        )
+        industrial_production.drop(sector_list, axis=1, inplace=True)
     return industrial_production, pypsa_sectors_to_combine
 
 
 @app.cell
 def _(industrial_production, year):
     # "Other industrial sectors" accounts for the biggest part. This comes from the raw data used in pypsa.
-    industrial_production.filter(regex = "AT", axis = 0).T.plot.barh(title = f"Industrial output in Austria for {year.value} in PyPSA-AT")
+    industrial_production.filter(regex="AT", axis=0).T.plot.barh(
+        title=f"Industrial output in Austria for {year.value} in PyPSA-AT"
+    )
     return
 
 
@@ -104,28 +165,42 @@ def _(mo):
 @app.cell(hide_code=True)
 def _(pd, pypsa_sectors_to_combine: dict, year):
     # Import file and combine same sectors, take absolute mean of sub-sector values – unit: TWh/Mt = MWh/t
-    industrial_sector_ratios = pd.read_csv(f"resources/pypsa_industry_files/industry_sector_ratios_{year.value}.csv", header = [0,1], index_col=0)
+    industrial_sector_ratios = pd.read_csv(
+        f"resources/pypsa_industry_files/industry_sector_ratios_{year.value}.csv",
+        header=[0, 1],
+        index_col=0,
+    )
     industrial_sector_ratios.index.names = ["TWh/Mt"]
     # Combine the same sectors as in industrial_production, per country (level 0 of the columns).
     industrial_sector_ratios_combined = industrial_sector_ratios
     for _combined_sector, _sector_list in pypsa_sectors_to_combine.items():
         _cols_to_drop = industrial_sector_ratios_combined.columns[
-            industrial_sector_ratios_combined.columns.get_level_values(1).isin(_sector_list)
+            industrial_sector_ratios_combined.columns.get_level_values(1).isin(
+                _sector_list
+            )
         ]
-        _combined = industrial_sector_ratios_combined[_cols_to_drop].T.groupby(level=0).mean().T
-        _combined.columns = pd.MultiIndex.from_product([_combined.columns, [_combined_sector]])
+        _combined = (
+            industrial_sector_ratios_combined[_cols_to_drop].T.groupby(level=0).mean().T
+        )
+        _combined.columns = pd.MultiIndex.from_product(
+            [_combined.columns, [_combined_sector]]
+        )
         industrial_sector_ratios_combined = pd.concat(
             [industrial_sector_ratios_combined, _combined], axis=1
         ).drop(columns=_cols_to_drop)
     industrial_sector_ratios_combined = industrial_sector_ratios_combined.loc[
-            ~industrial_sector_ratios_combined.index.str.contains("process emission", regex=True)
-        ]
+        ~industrial_sector_ratios_combined.index.str.contains(
+            "process emission", regex=True
+        )
+    ]
     return (industrial_sector_ratios_combined,)
 
 
 @app.cell
 def _(industrial_sector_ratios_combined):
-    industrial_sector_ratios_combined.filter(regex = "AT", axis=1).T.plot.bar(stacked = True, figsize = (15,5))
+    industrial_sector_ratios_combined.filter(regex="AT", axis=1).T.plot.bar(
+        stacked=True, figsize=(15, 5), backend="matplotlib"
+    )
     return
 
 
@@ -147,22 +222,27 @@ def _(industrial_production, industrial_sector_ratios_combined):
     # stacking `industrial_production` into a Series with a matching (country, sector)
     # MultiIndex lets `.mul(..., axis=1)` broadcast and align on those column pairs directly.
     prod_stacked = industrial_production.stack()
-    prod_stacked.index.names = industrial_sector_ratios_combined.columns.names = ["country", "sector"]
+    prod_stacked.index.names = industrial_sector_ratios_combined.columns.names = [
+        "country",
+        "sector",
+    ]
 
-    industrial_energy_demand = industrial_sector_ratios_combined.mul(prod_stacked, axis=1)
+    industrial_energy_demand = industrial_sector_ratios_combined.mul(
+        prod_stacked, axis=1
+    )
     industrial_energy_demand.index.names = ["TWh/a"]
     return (industrial_energy_demand,)
 
 
 @app.cell
 def _(industrial_energy_demand):
-    industrial_energy_demand.filter(regex = "AT", axis = 1)
+    industrial_energy_demand.filter(regex="AT", axis=1)
     return
 
 
 @app.cell(hide_code=True)
 def _(mo):
-    render_sankey_switch = mo.ui.switch(label = "Render pypsa-at industry sankey")
+    render_sankey_switch = mo.ui.switch(label="Render pypsa-at industry sankey")
     return (render_sankey_switch,)
 
 
@@ -191,8 +271,13 @@ def _(go, industrial_energy_demand, render_sankey_switch, year):
         go.Sankey(
             node={"label": _node_labels, "pad": 30, "thickness": 20},
             link={
-                "source": [_carriers.index(carrier) for carrier, _sector in _flows.index],
-                "target": [len(_carriers) + _sectors.index(sector) for _carrier, sector in _flows.index],
+                "source": [
+                    _carriers.index(carrier) for carrier, _sector in _flows.index
+                ],
+                "target": [
+                    len(_carriers) + _sectors.index(sector)
+                    for _carrier, sector in _flows.index
+                ],
                 "value": _flows.values,
             },
         )
@@ -235,10 +320,34 @@ def _(mo):
 
 
 @app.cell
-def _(energy_inputs_harmonization, pd):
+def _(mo):
+    nefi_scenario = mo.ui.dropdown(
+        options=["Scenario1", "Scenario2a"], label="NEFI Scenario to use"
+    )
+    return (nefi_scenario,)
+
+
+@app.cell
+def _(mo, nefi_scenario):
+    mo.vstack(
+        [mo.hstack([nefi_scenario, mo.md(f"Evaluates scenario {nefi_scenario.value}")])]
+    )
+    return
+
+
+@app.cell
+def _(energy_inputs_harmonization, nefi_scenario, pd):
     # Import NEFi values, convert unit to TWh and harmonize with pypsa-energy inputs
-    nefi_total_industry_fe = pd.read_excel("resources/v2-NEFI-Scenario2a.xlsx", sheet_name="Scenario2a-AllManuf", index_col=0, header = 0, decimal = ",")
-    nefi_fe = nefi_total_industry_fe.select_dtypes(exclude=object) #.mul(8.760) # GWyr to TWh <-- new input is in TWh
+    nefi_total_industry_fe = pd.read_excel(
+        f"resources/v3-{nefi_scenario.value}_deduplicated.xlsx",
+        sheet_name=f"{nefi_scenario.value}-AllManuf",
+        index_col=0,
+        header=0,
+        decimal=",",
+    )
+    nefi_fe = nefi_total_industry_fe.select_dtypes(
+        exclude=object
+    )  # .mul(8.760) # GWyr to TWh <-- new input is in TWh
     nefi_total_industry_fe_in_pypsa = energy_inputs_harmonization(nefi_fe)
     return (nefi_total_industry_fe_in_pypsa,)
 
@@ -254,18 +363,23 @@ def _(
     # combine sectors in pypsa-setting for consistency
     _industrial_energy_demand = industrial_energy_demand.T
     for _key, _list in pypsa_combinations_for_nefi_inputs_dict.items():
-        _industrial_energy_demand[_key] = _industrial_energy_demand[_list].sum(axis = 1)
-        _industrial_energy_demand.drop(_list, axis = 1, inplace = True)
+        _industrial_energy_demand[_key] = _industrial_energy_demand[_list].sum(axis=1)
+        _industrial_energy_demand.drop(_list, axis=1, inplace=True)
     _industrial_energy_demand = _industrial_energy_demand.T
-    _total_demand_pypsa_at = _industrial_energy_demand.filter(regex = "AT", axis = 1).sum(axis = 1)
+    _total_demand_pypsa_at = _industrial_energy_demand.filter(regex="AT", axis=1).sum(
+        axis=1
+    )
     _total_demand_nefi = nefi_total_industry_fe_in_pypsa[int(year.value)]
     # combine total_demand_pypsa_at and total_demand_nefi to one dataset and create a bar-plot to compare the values of the two datasources.
-    total_demand_comparison = pd.DataFrame({
-        "PyPSA-AT": _total_demand_pypsa_at,
-        "NEFI": _total_demand_nefi,
-    }).reindex(_total_demand_pypsa_at.index)  # drop nefi rows with no pypsa carrier mapping (e.g. "Total")
+    total_demand_comparison = pd.DataFrame(
+        {
+            "PyPSA-AT": _total_demand_pypsa_at,
+            "NEFI": _total_demand_nefi,
+        }
+    ).reindex(
+        _total_demand_pypsa_at.index
+    )  # drop nefi rows with no pypsa carrier mapping (e.g. "Total")
     total_demand_comparison.plot.bar(
-        figsize=(10, 5),
         title=f"Industrial energy demand by carrier in Austria, {year.value} (TWh/a): PyPSA-AT vs. NEFI",
     )
     return
@@ -285,47 +399,248 @@ def _(mo):
 
 @app.cell
 def _(mo):
-    nefi_sector = mo.ui.dropdown(options = ["AllManuf","IronSteel", "Chemical", "PulpPaper", "NonMetalicMinerals", "Machinery", "NonFerrousMetals", "FoodAndBeverages", "Wood", "Textiles", "NonSpecifiedIndustry", "Construction", "Mining"], value= "AllManuf", label = "Industry Sector ")
+    nefi_sector = mo.ui.dropdown(
+        options=[
+            "AllManuf",
+            "IronSteel",
+            "Chemical",
+            "PulpPaper",
+            "NonMetalicMinerals",
+            "Machinery",
+            "TransportEquipment",
+            "NonFerrousMetals",
+            "FoodAndBeverages",
+            "Wood",
+            "Textiles",
+            "NonSpecifiedIndustry",
+            "Construction",
+            "Mining",
+        ],
+        value="AllManuf",
+        label="Industry Sector ",
+    )
     return (nefi_sector,)
 
 
 @app.cell(hide_code=True)
 def _(mo, nefi_sector):
-    mo.vstack([mo.hstack([nefi_sector, mo.md(f"Evaluates sector {nefi_sector.value}")])])
+    mo.vstack(
+        [mo.hstack([nefi_sector, mo.md(f"Evaluates sector {nefi_sector.value}")])]
+    )
     return
 
 
 @app.cell
-def _(energy_inputs_harmonization, nefi_sector, pd):
-    nefis = pd.read_excel("resources/v2-NEFI-Scenario2a.xlsx", sheet_name="Scenario2a-"+nefi_sector.value, index_col=0, header=0)
-    nefis = nefis.select_dtypes(exclude=object) #.mul(8.760) # GWyr to TWh <-- new intput is in TWh
-    nefis = energy_inputs_harmonization(nefis)
-    if "Total" in nefis.index: 
-        nefis.drop("Total", axis = 0, inplace=True)
-    if "losses" in nefis.index:
-        nefis.drop("losses", axis = 0, inplace=True)
+def _(energy_inputs_harmonization, pd):
+    def read_nefi_sector(scenario, sector):
+        # Read a NEFI scenario/sector sheet, harmonize to pypsa carriers and drop
+        # the non-carrier "Total"/"losses" rows. Reused for both the interactive
+        # single-scenario plot and the workshop batch export.
+        _df = pd.read_excel(
+            f"resources/v3-{scenario}_deduplicated.xlsx",
+            sheet_name=f"{scenario}-{sector}",
+            index_col=0,
+            header=0,
+        )
+        _df = _df.select_dtypes(
+            exclude=object
+        )  # .mul(8.760) # GWyr to TWh <-- new intput is in TWh
+        _df = energy_inputs_harmonization(_df)
+        return _df.drop(["Total", "losses"], axis=0, errors="ignore")
+
+    return (read_nefi_sector,)
+
+
+@app.cell
+def _(nefi_scenario, nefi_sector, read_nefi_sector):
+    nefis = read_nefi_sector(nefi_scenario.value, nefi_sector.value)
     return (nefis,)
 
 
 @app.cell
-def _(nefi_sector, nefis):
-    nefis.T.plot.area(stacked = True, figsize = (15,5), title = f"Energy input for sector {nefi_sector.value} [TWh/a]") 
+def _(nefi_scenario, nefi_sector, nefis):
+    nefis.T.plot.area(
+        stacked=True,
+        title=f"Energy input for sector {nefi_sector.value}, {nefi_scenario.value} [TWh/a]",
+        backend="plotly",
+    )
     return
 
 
 @app.cell
-def _(energy_inputs_harmonization, pd, year):
-    sectors = ["IronSteel", "Chemical", "PulpPaper", "NonMetalicMinerals", "Machinery", "NonFerrousMetals", "FoodAndBeverages", "Wood", "Textiles", "NonSpecifiedIndustry", "Construction", "Mining"]
+def _(mo):
+    # Set a fixed y-axis maximum to make y-scales comparable across plots.
+    # Leave at 0 for automatic scaling.
+    y_max = mo.ui.number(
+        start=0,
+        stop=100000,
+        value=0,
+        label="Max y-axis value (TWh/a, 0 = auto) ",
+    )
+    return (y_max,)
+
+
+@app.cell(hide_code=True)
+def _(mo, y_max):
+    mo.vstack([mo.hstack([y_max, mo.md("0 uses automatic y-axis scaling")])])
+    return
+
+
+@app.cell
+def _(go):
+    def build_sector_bar_fig(data, title, scenario_label, y_max_value):
+        # Compare 2025 vs 2050 as stacked bars, with semi-transparent ribbons linking
+        # each carrier's segment across the two bars to visualize how it grows/shrinks.
+        _years = [2025, 2050]
+        _data = data[_years]
+        _carriers = _data.index.tolist()  # same order in both bars → comparable
+
+        # reuse pandas/plotly-express default color assignment so bars stay consistent
+        _colors = {
+            tr.name: tr.marker.color for tr in _data.T.plot.bar(backend="plotly").data
+        }
+
+        def _to_rgba(color, alpha):
+            _c = color.lstrip("#")
+            return f"rgba({int(_c[0:2], 16)}, {int(_c[2:4], 16)}, {int(_c[4:6], 16)}, {alpha})"
+
+        _x = [0, 1]
+        _width = 0.5
+        _right, _left = _x[0] + _width / 2, _x[1] - _width / 2  # inner bar edges
+
+        fig = go.Figure()
+        # ribbons first so the bars are drawn on top of them
+        _bottoms = [0.0, 0.0]
+        for _carrier in _carriers:
+            _v0, _v1 = _data.loc[_carrier, _years[0]], _data.loc[_carrier, _years[1]]
+            _top0, _top1 = _bottoms[0] + _v0, _bottoms[1] + _v1
+            fig.add_trace(
+                go.Scatter(
+                    x=[_right + 0.005, _right + 0.005, _left - 0.005, _left - 0.005],
+                    y=[_bottoms[0], _top0, _top1, _bottoms[1]],
+                    fill="toself",
+                    mode="lines",
+                    line=dict(width=0),
+                    fillcolor=_to_rgba(_colors[_carrier], 0.35),
+                    hoverinfo="skip",
+                    showlegend=False,
+                )
+            )
+            _bottoms = [_top0, _top1]
+
+        for _carrier in _carriers:
+            fig.add_bar(
+                x=_x,
+                y=_data.loc[_carrier].tolist(),
+                name=_carrier,
+                width=_width,
+                marker_color=_colors[_carrier],
+            )
+
+        fig.update_layout(
+            barmode="stack",
+            font=dict(size=20),
+            title=dict(
+                text=title,
+                font=dict(size=28),
+                subtitle=dict(
+                    text=f"{scenario_label}, 2025 vs 2050 [TWh/a]",
+                    font=dict(color="gray", size=20),
+                ),
+            ),
+            legend=dict(font=dict(size=24)),
+            xaxis=dict(
+                tickvals=_x,
+                ticktext=[str(_y) for _y in _years],
+                title=dict(text="Year", font=dict(size=22)),
+                tickfont=dict(size=20),
+            ),
+            yaxis=dict(
+                title=dict(text="TWh/a", font=dict(size=22)),
+                tickfont=dict(size=20),
+                range=[0, y_max_value] if y_max_value else None,
+            ),
+        )
+        return fig
+
+    return (build_sector_bar_fig,)
+
+
+@app.cell
+def _(
+    build_sector_bar_fig,
+    mo,
+    nefi_scenario,
+    nefi_sector,
+    nefis,
+    read_nefi_sector,
+    workshop_switch,
+    workshop_title,
+    workshop_title_placeholder,
+    y_max,
+):
+    # use the hand-set title if one was entered, otherwise fall back to the sector
+    _title = workshop_title.value.strip()
+    if not _title or _title == workshop_title_placeholder:
+        _title = nefi_sector.value
+
+    if workshop_switch.value:
+        # Workshop mode: plot both scenarios automatically with a hand-set title,
+        # always taking the (already-modelled) 2025 column from Scenario1 so the
+        # base year is identical across scenarios. Save both to outputs_workshop/.
+        _base_2025 = read_nefi_sector("Scenario1", nefi_sector.value)[2025]
+        _rendered = []
+        for _scenario in ["Scenario1", "Scenario2a"]:
+            _data = read_nefi_sector(_scenario, nefi_sector.value)
+            _data[2025] = _base_2025
+            _fig = build_sector_bar_fig(_data, _title, _scenario, y_max.value)
+            _fig.write_html(f"outputs_workshop/{nefi_sector.value}_{_scenario}.html")
+            _rendered.append(mo.as_html(_fig))
+        _output = mo.vstack(_rendered)
+    else:
+        _fig = build_sector_bar_fig(
+            nefis,
+            _title,
+            nefi_scenario.value,
+            y_max.value,
+        )
+        _fig.write_html(
+            f"outputs_workshop/{nefi_sector.value}_{nefi_scenario.value}.html"
+        )
+        _output = mo.as_html(_fig)
+    _output
+    return
+
+
+@app.cell
+def _(energy_inputs_harmonization, nefi_scenario, pd, year):
+    sectors = [
+        "IronSteel",
+        "Chemical",
+        "PulpPaper",
+        "NonMetalicMinerals",
+        "Machinery",
+        "TransportEquipment",
+        "NonFerrousMetals",
+        "FoodAndBeverages",
+        "Wood",
+        "Textiles",
+        "NonSpecifiedIndustry",
+        "Construction",
+        "Mining",
+    ]
     dfs = []
 
     for sector in sectors:
         df = pd.read_excel(
-            "resources/v2-NEFI-Scenario2a.xlsx",
-            sheet_name="Scenario2a-"+sector,
+            f"resources/v3-{nefi_scenario.value}_deduplicated.xlsx",
+            sheet_name=nefi_scenario.value + "-" + sector,
             index_col=0,
             header=0,
         )
-        df = df.select_dtypes(exclude=object) #.mul(8.760)  # GWyr to TWh <-- new input is in TWh
+        df = df.select_dtypes(
+            exclude=object
+        )  # .mul(8.760)  # GWyr to TWh <-- new input is in TWh
         df = df[[int(year.value)]]  # Filter to selected year
         df = energy_inputs_harmonization(df)  # Harmonize inputs
         df.columns = [sector]  # Rename column to sector name
@@ -338,7 +653,7 @@ def _(energy_inputs_harmonization, pd, year):
 
 
 @app.cell
-def _(go, nefi_inputs_by_sector, year):
+def _(go, nefi_inputs_by_sector, nefi_scenario, year):
     # Create Sankey diagram
     _carriers = nefi_inputs_by_sector.index.tolist()
     _sectors = nefi_inputs_by_sector.columns.tolist()
@@ -361,7 +676,7 @@ def _(go, nefi_inputs_by_sector, year):
         )
     )
     nefi_energy_sankey.update_layout(
-        title_text=f"NEFI: energy input by carrier and sector in {year.value} (TWh/a)",
+        title_text=f"NEFI: energy input by carrier and sector in {year.value}, {nefi_scenario.value} (TWh/a)",
         font_size=10,
     )
 
@@ -370,33 +685,44 @@ def _(go, nefi_inputs_by_sector, year):
 
 
 @app.cell
-def _(energy_inputs_harmonization, pd, sectors, year):
+def _(energy_inputs_harmonization, nefi_scenario, pd, sectors, year):
     # Check, if dataset is consistent, or sectors are missing
     _dfs = []
 
-    for _sector in sectors+["AllManuf"]:
+    for _sector in sectors + ["AllManuf"]:
         _df = pd.read_excel(
-            "resources/v2-NEFI-Scenario2a.xlsx",
-            sheet_name="Scenario2a-"+_sector,
+            f"resources/v3-{nefi_scenario.value}_deduplicated.xlsx",
+            sheet_name=nefi_scenario.value + "-" + _sector,
             index_col=0,
             header=0,
         )
-        _df = _df.select_dtypes(exclude=object) #.mul(8.760)  # GWyr to TWh <-- new input is in TWh
+        _df = _df.select_dtypes(
+            exclude=object
+        )  # .mul(8.760)  # GWyr to TWh <-- new input is in TWh
         _df = _df[[int(year.value)]]  # Filter to selected year
         _df = energy_inputs_harmonization(_df)  # Harmonize inputs
         _df.drop("Total", axis=0, inplace=True, errors="ignore")
         _df.columns = [_sector]
         _dfs.append(_df)
 
-    all_sectors_and_sum = pd.concat(_dfs, axis = 1)
-    all_sectors_and_sum["manual sum"] = all_sectors_and_sum[sectors].sum(axis = 1)
-    all_sectors_and_sum[["manual sum", "AllManuf"]].plot.bar(figsize = (15,5),title = "Subsectors do not sum up to values of All Manifacturing [TWh/a] ")
+    all_sectors_and_sum = pd.concat(_dfs, axis=1)
+    all_sectors_and_sum["manual sum"] = all_sectors_and_sum[sectors].sum(axis=1)
+    all_sectors_and_sum[["manual sum", "AllManuf"]].plot.bar(
+        figsize=(15, 5),
+        backend="matplotlib",
+        title="Subsectors do not sum up to values of All Manifacturing [TWh/a] ",
+    )
     return
 
 
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
+    #### Known Inconsistencies for that plot
+    - inconsistency in Naphtha, due to "Chem. Ind. Foss. Rohstoffe (ölbasiert)" with no definition.
+    - inconsistency in Methane, due to several duplicates in "Gas grid ix", "Gas grid mix" and different entries for non-fossil Gas.
+    - inconsistency in Hydrogen, due to several duplicate rows, we are actually taking the mean value of
+
     This is the end.
 
     ---
