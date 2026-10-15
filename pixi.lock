@@ -1776,9 +1776,10 @@ packages:
 - pypi: ./
   name: esm-scenario-preprocessing
   version: 0.1.0
-  sha256: bed29ad8feb5c5c80060d29969c0009adeea56b7dc7dbcf727c634e8eaf5d0ea
+  sha256: 90020ee97822f4b0917e903781868982a7b927b6bfc612b4a004c8a6a16f1e10
   requires_dist:
   - pandas>=1.0.0
+  - openpyxl>=3.1
   - pyam-iamc>=2.0.0
   - marimo>=0.7,<1.0
   - nomenclature-iamc>=0.29
