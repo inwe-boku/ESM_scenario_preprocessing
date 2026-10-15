@@ -99,15 +99,29 @@ def get_transport_sector_technology_shares(
             f"{list(TRANSPORT_SCENARIO_DEMAND_DICT)}."
         )
 
-    pdf = pyam.IamDataFrame(file_path)
-    cars_absolute = pdf.filter(
-        scenario=TRANSPORT_SCENARIO_DEMAND_DICT[scenario],
-        variable=TRANSPORT_CAR_VARIABLES,
-        region="Austria",
-    ).pivot_table(index="variable", columns="year", values="value", aggfunc="mean")
+    scenarios = TRANSPORT_SCENARIO_DEMAND_DICT[scenario]
+    pdf = pyam.IamDataFrame(file_path).filter(
+        scenario=scenarios, variable=TRANSPORT_CAR_VARIABLES, region="Austria"
+    )
+    missing_scenarios = sorted(set(scenarios) - set(pdf.scenario))
+    if missing_scenarios:
+        raise ValueError(f"Scenarios missing in {file_path!r}: {missing_scenarios}.")
 
+    cars_by_scenario = pdf.pivot_table(
+        index=["scenario", "variable"], columns="year", values="value", aggfunc="sum"
+    ).reindex(
+        pd.MultiIndex.from_product(
+            [scenarios, TRANSPORT_CAR_VARIABLES], names=["scenario", "variable"]
+        )
+    )
     # Missing values mean the technology has zero stock in that year, not unknown data.
-    cars_absolute_numeric = cars_absolute.apply(pd.to_numeric, errors="raise").fillna(0)
+    # Fill per scenario before averaging, so a gap counts as zero in the mean.
+    cars_absolute_numeric = (
+        cars_by_scenario.apply(pd.to_numeric, errors="raise")
+        .fillna(0)
+        .groupby(level="variable")
+        .mean()
+    )
     common_basis = cars_absolute_numeric.sum(axis=0, skipna=True).loc[2023]
     if math.isclose(common_basis, 0):
         raise ValueError("Comparison-variable 'common_basis' is near zero.")
@@ -121,8 +135,9 @@ def get_transport_sector_technology_shares(
     demand_factor = cars_absolute_with_shares.filter(like="Share", axis=0)[
         [2021, 2023, 2030, 2040]
     ].sum(axis=0)
+    # A negative demand factor is physically invalid, so cut projections at 0.
     demand_factor_at_new_years = {
-        year: _extrapolate_to_year(demand_factor, year)
+        year: max(0.0, _extrapolate_to_year(demand_factor, year))
         for year in (2025, 2035, 2045, 2050)
     }
 
