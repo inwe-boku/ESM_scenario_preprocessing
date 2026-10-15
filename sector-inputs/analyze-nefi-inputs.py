@@ -28,6 +28,34 @@ def _():
 
 @app.cell(hide_code=True)
 def _(mo):
+    # Workshop mode: for the sector bar plots (used in presentations) the 2025
+    # values must be identical across scenarios, so 2025 is always taken from
+    # Scenario1. Both Scenario1 and Scenario2a are plotted and saved automatically,
+    # and the plot title is set by hand via `workshop_title`.
+    workshop_switch = mo.ui.switch(label="Workshop")
+    workshop_title = mo.ui.text(
+        value="Energieinput für alle Industriesektoren",
+        label="Workshop plot title",
+        full_width=True,
+    )
+    return workshop_switch, workshop_title
+
+
+@app.cell(hide_code=True)
+def _(mo, workshop_switch, workshop_title):
+    mo.vstack(
+        [
+            mo.hstack(
+                [workshop_switch, mo.md(f"Workshop mode: {workshop_switch.value}")]
+            ),
+            workshop_title,
+        ]
+    )
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
     mo.md(r"""
     # Preprocess NEFI-Input for Industry Scenarios
 
@@ -397,22 +425,29 @@ def _(mo, nefi_sector):
 
 
 @app.cell
-def _(energy_inputs_harmonization, nefi_scenario, nefi_sector, pd):
+def _(energy_inputs_harmonization, pd):
+    def read_nefi_sector(scenario, sector):
+        # Read a NEFI scenario/sector sheet, harmonize to pypsa carriers and drop
+        # the non-carrier "Total"/"losses" rows. Reused for both the interactive
+        # single-scenario plot and the workshop batch export.
+        _df = pd.read_excel(
+            f"resources/v3-{scenario}_deduplicated.xlsx",
+            sheet_name=f"{scenario}-{sector}",
+            index_col=0,
+            header=0,
+        )
+        _df = _df.select_dtypes(
+            exclude=object
+        )  # .mul(8.760) # GWyr to TWh <-- new intput is in TWh
+        _df = energy_inputs_harmonization(_df)
+        return _df.drop(["Total", "losses"], axis=0, errors="ignore")
 
-    nefis = pd.read_excel(
-        f"resources/v3-{nefi_scenario.value}_deduplicated.xlsx",
-        sheet_name=nefi_scenario.value + "-" + nefi_sector.value,
-        index_col=0,
-        header=0,
-    )
-    nefis = nefis.select_dtypes(
-        exclude=object
-    )  # .mul(8.760) # GWyr to TWh <-- new intput is in TWh
-    nefis = energy_inputs_harmonization(nefis)
-    if "Total" in nefis.index:
-        nefis.drop("Total", axis=0, inplace=True)
-    if "losses" in nefis.index:
-        nefis.drop("losses", axis=0, inplace=True)
+    return (read_nefi_sector,)
+
+
+@app.cell
+def _(nefi_scenario, nefi_sector, read_nefi_sector):
+    nefis = read_nefi_sector(nefi_scenario.value, nefi_sector.value)
     return (nefis,)
 
 
@@ -446,82 +481,123 @@ def _(mo, y_max):
 
 
 @app.cell
-def _(go, nefi_scenario, nefi_sector, nefis, pd, y_max):
-    pd.options.plotting.backend = "plotly"
-    # Compare 2025 vs 2050 as stacked bars, with semi-transparent ribbons linking
-    # each carrier's segment across the two bars to visualize how it grows/shrinks.
-    _years = [2025, 2050]
-    _data = nefis[_years]
-    _carriers = _data.index.tolist()  # same order in both bars → comparable
+def _(go, pd):
+    def build_sector_bar_fig(data, title, scenario_label, y_max_value):
+        # Compare 2025 vs 2050 as stacked bars, with semi-transparent ribbons linking
+        # each carrier's segment across the two bars to visualize how it grows/shrinks.
+        pd.options.plotting.backend = "plotly"
+        _years = [2025, 2050]
+        _data = data[_years]
+        _carriers = _data.index.tolist()  # same order in both bars → comparable
 
-    # reuse pandas/plotly-express default color assignment so bars stay consistent
-    _colors = {tr.name: tr.marker.color for tr in _data.T.plot.bar().data}
+        # reuse pandas/plotly-express default color assignment so bars stay consistent
+        _colors = {tr.name: tr.marker.color for tr in _data.T.plot.bar().data}
 
-    def _to_rgba(color, alpha):
-        _c = color.lstrip("#")
-        return (
-            f"rgba({int(_c[0:2], 16)}, {int(_c[2:4], 16)}, {int(_c[4:6], 16)}, {alpha})"
-        )
+        def _to_rgba(color, alpha):
+            _c = color.lstrip("#")
+            return f"rgba({int(_c[0:2], 16)}, {int(_c[2:4], 16)}, {int(_c[4:6], 16)}, {alpha})"
 
-    _x = [0, 1]
-    _width = 0.5
-    _right, _left = _x[0] + _width / 2, _x[1] - _width / 2  # inner bar edges
+        _x = [0, 1]
+        _width = 0.5
+        _right, _left = _x[0] + _width / 2, _x[1] - _width / 2  # inner bar edges
 
-    fig = go.Figure()
-    # ribbons first so the bars are drawn on top of them
-    _bottoms = [0.0, 0.0]
-    for _carrier in _carriers:
-        _v0, _v1 = _data.loc[_carrier, _years[0]], _data.loc[_carrier, _years[1]]
-        _top0, _top1 = _bottoms[0] + _v0, _bottoms[1] + _v1
-        fig.add_trace(
-            go.Scatter(
-                x=[_right + 0.005, _right + 0.005, _left - 0.005, _left - 0.005],
-                y=[_bottoms[0], _top0, _top1, _bottoms[1]],
-                fill="toself",
-                mode="lines",
-                line=dict(width=0),
-                fillcolor=_to_rgba(_colors[_carrier], 0.35),
-                hoverinfo="skip",
-                showlegend=False,
+        fig = go.Figure()
+        # ribbons first so the bars are drawn on top of them
+        _bottoms = [0.0, 0.0]
+        for _carrier in _carriers:
+            _v0, _v1 = _data.loc[_carrier, _years[0]], _data.loc[_carrier, _years[1]]
+            _top0, _top1 = _bottoms[0] + _v0, _bottoms[1] + _v1
+            fig.add_trace(
+                go.Scatter(
+                    x=[_right + 0.005, _right + 0.005, _left - 0.005, _left - 0.005],
+                    y=[_bottoms[0], _top0, _top1, _bottoms[1]],
+                    fill="toself",
+                    mode="lines",
+                    line=dict(width=0),
+                    fillcolor=_to_rgba(_colors[_carrier], 0.35),
+                    hoverinfo="skip",
+                    showlegend=False,
+                )
             )
-        )
-        _bottoms = [_top0, _top1]
+            _bottoms = [_top0, _top1]
 
-    for _carrier in _carriers:
-        fig.add_bar(
-            x=_x,
-            y=_data.loc[_carrier].tolist(),
-            name=_carrier,
-            width=_width,
-            marker_color=_colors[_carrier],
-        )
+        for _carrier in _carriers:
+            fig.add_bar(
+                x=_x,
+                y=_data.loc[_carrier].tolist(),
+                name=_carrier,
+                width=_width,
+                marker_color=_colors[_carrier],
+            )
 
-    fig.update_layout(
-        barmode="stack",
-        font=dict(size=20),
-        title=dict(
-            text=f"Energieinput für alle Industriesektoren", #sector {nefi_sector.value}",
-            font=dict(size=28),
-            subtitle=dict(
-                text=f"{nefi_scenario.value}, 2025 vs 2050 [TWh/a]",
-                font=dict(color="gray", size=20),
+        fig.update_layout(
+            barmode="stack",
+            font=dict(size=20),
+            title=dict(
+                text=title,
+                font=dict(size=28),
+                subtitle=dict(
+                    text=f"{scenario_label}, 2025 vs 2050 [TWh/a]",
+                    font=dict(color="gray", size=20),
+                ),
             ),
-        ),
-        legend=dict(font=dict(size=24)),
-        xaxis=dict(
-            tickvals=_x,
-            ticktext=[str(_y) for _y in _years],
-            title=dict(text="Year", font=dict(size=22)),
-            tickfont=dict(size=20),
-        ),
-        yaxis=dict(
-            title=dict(text="TWh/a", font=dict(size=22)),
-            tickfont=dict(size=20),
-            range=[0, y_max.value] if y_max.value else None,
-        ),
-    )
-    fig.show()
-    fig.write_html(f"outputs_workshop/{nefi_sector.value}_{nefi_scenario.value}.html")
+            legend=dict(font=dict(size=24)),
+            xaxis=dict(
+                tickvals=_x,
+                ticktext=[str(_y) for _y in _years],
+                title=dict(text="Year", font=dict(size=22)),
+                tickfont=dict(size=20),
+            ),
+            yaxis=dict(
+                title=dict(text="TWh/a", font=dict(size=22)),
+                tickfont=dict(size=20),
+                range=[0, y_max_value] if y_max_value else None,
+            ),
+        )
+        return fig
+
+    return (build_sector_bar_fig,)
+
+
+@app.cell
+def _(
+    build_sector_bar_fig,
+    mo,
+    nefi_scenario,
+    nefi_sector,
+    nefis,
+    read_nefi_sector,
+    workshop_switch,
+    workshop_title,
+    y_max,
+):
+    if workshop_switch.value:
+        # Workshop mode: plot both scenarios automatically with a hand-set title,
+        # always taking the (already-modelled) 2025 column from Scenario1 so the
+        # base year is identical across scenarios. Save both to outputs_workshop/.
+        _base_2025 = read_nefi_sector("Scenario1", nefi_sector.value)[2025]
+        _rendered = []
+        for _scenario in ["Scenario1", "Scenario2a"]:
+            _data = read_nefi_sector(_scenario, nefi_sector.value)
+            _data[2025] = _base_2025
+            _fig = build_sector_bar_fig(
+                _data, workshop_title.value, _scenario, y_max.value
+            )
+            _fig.write_html(f"outputs_workshop/{nefi_sector.value}_{_scenario}.html")
+            _rendered.append(mo.as_html(_fig))
+        _output = mo.vstack(_rendered)
+    else:
+        _fig = build_sector_bar_fig(
+            nefis,
+            "Energieinput für alle Industriesektoren",
+            nefi_scenario.value,
+            y_max.value,
+        )
+        _fig.write_html(
+            f"outputs_workshop/{nefi_sector.value}_{nefi_scenario.value}.html"
+        )
+        _output = mo.as_html(_fig)
+    _output
     return
 
 
