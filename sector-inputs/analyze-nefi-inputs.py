@@ -9,13 +9,19 @@ app = marimo.App(
 
 @app.cell
 def _():
+    from pathlib import Path
+
     import marimo as mo
     import pandas as pd
     import plotly.graph_objects as go
+
     from esm_scenario_preprocessing.harmonization_helpers import (
         energy_inputs_harmonization,
         pypsa_combinations_for_nefi_inputs_dict,
     )
+
+    # plots are exported here; create it up front so write_html never fails
+    Path("outputs_workshop").mkdir(exist_ok=True)
 
     return (
         energy_inputs_harmonization,
@@ -33,12 +39,13 @@ def _(mo):
     # Scenario1. Both Scenario1 and Scenario2a are plotted and saved automatically,
     # and the plot title is set by hand via `workshop_title`.
     workshop_switch = mo.ui.switch(label="Workshop")
+    workshop_title_placeholder = "Write the desired title in here."
     workshop_title = mo.ui.text(
-        value="Energieinput für alle Industriesektoren",
+        value=workshop_title_placeholder,
         label="Workshop plot title",
         full_width=True,
     )
-    return workshop_switch, workshop_title
+    return workshop_switch, workshop_title, workshop_title_placeholder
 
 
 @app.cell(hide_code=True)
@@ -190,10 +197,9 @@ def _(pd, pypsa_sectors_to_combine: dict, year):
 
 
 @app.cell
-def _(industrial_sector_ratios_combined, pd):
-    pd.options.plotting.backend = "matplotlib"
+def _(industrial_sector_ratios_combined):
     industrial_sector_ratios_combined.filter(regex="AT", axis=1).T.plot.bar(
-        stacked=True, figsize=(15, 5)
+        stacked=True, figsize=(15, 5), backend="matplotlib"
     )
     return
 
@@ -452,11 +458,11 @@ def _(nefi_scenario, nefi_sector, read_nefi_sector):
 
 
 @app.cell
-def _(nefi_scenario, nefi_sector, nefis, pd):
-    pd.options.plotting.backend = "plotly"
+def _(nefi_scenario, nefi_sector, nefis):
     nefis.T.plot.area(
         stacked=True,
         title=f"Energy input for sector {nefi_sector.value}, {nefi_scenario.value} [TWh/a]",
+        backend="plotly",
     )
     return
 
@@ -481,17 +487,18 @@ def _(mo, y_max):
 
 
 @app.cell
-def _(go, pd):
+def _(go):
     def build_sector_bar_fig(data, title, scenario_label, y_max_value):
         # Compare 2025 vs 2050 as stacked bars, with semi-transparent ribbons linking
         # each carrier's segment across the two bars to visualize how it grows/shrinks.
-        pd.options.plotting.backend = "plotly"
         _years = [2025, 2050]
         _data = data[_years]
         _carriers = _data.index.tolist()  # same order in both bars → comparable
 
         # reuse pandas/plotly-express default color assignment so bars stay consistent
-        _colors = {tr.name: tr.marker.color for tr in _data.T.plot.bar().data}
+        _colors = {
+            tr.name: tr.marker.color for tr in _data.T.plot.bar(backend="plotly").data
+        }
 
         def _to_rgba(color, alpha):
             _c = color.lstrip("#")
@@ -569,8 +576,14 @@ def _(
     read_nefi_sector,
     workshop_switch,
     workshop_title,
+    workshop_title_placeholder,
     y_max,
 ):
+    # use the hand-set title if one was entered, otherwise fall back to the sector
+    _title = workshop_title.value.strip()
+    if not _title or _title == workshop_title_placeholder:
+        _title = nefi_sector.value
+
     if workshop_switch.value:
         # Workshop mode: plot both scenarios automatically with a hand-set title,
         # always taking the (already-modelled) 2025 column from Scenario1 so the
@@ -580,16 +593,14 @@ def _(
         for _scenario in ["Scenario1", "Scenario2a"]:
             _data = read_nefi_sector(_scenario, nefi_sector.value)
             _data[2025] = _base_2025
-            _fig = build_sector_bar_fig(
-                _data, workshop_title.value, _scenario, y_max.value
-            )
+            _fig = build_sector_bar_fig(_data, _title, _scenario, y_max.value)
             _fig.write_html(f"outputs_workshop/{nefi_sector.value}_{_scenario}.html")
             _rendered.append(mo.as_html(_fig))
         _output = mo.vstack(_rendered)
     else:
         _fig = build_sector_bar_fig(
             nefis,
-            "Energieinput für alle Industriesektoren",
+            _title,
             nefi_scenario.value,
             y_max.value,
         )
@@ -675,7 +686,6 @@ def _(go, nefi_inputs_by_sector, nefi_scenario, year):
 
 @app.cell
 def _(energy_inputs_harmonization, nefi_scenario, pd, sectors, year):
-    pd.options.plotting.backend = "matplotlib"
     # Check, if dataset is consistent, or sectors are missing
     _dfs = []
 
@@ -699,6 +709,7 @@ def _(energy_inputs_harmonization, nefi_scenario, pd, sectors, year):
     all_sectors_and_sum["manual sum"] = all_sectors_and_sum[sectors].sum(axis=1)
     all_sectors_and_sum[["manual sum", "AllManuf"]].plot.bar(
         figsize=(15, 5),
+        backend="matplotlib",
         title="Subsectors do not sum up to values of All Manifacturing [TWh/a] ",
     )
     return
