@@ -10,6 +10,26 @@ check below fails.
    `dropped_rows_log`.
 2. Format every sheet: bold header row, freeze panes at A2, autofilter over the used range,
    column width = longest value + 2 (min 10, max 60). Do not change any values.
+   Use exactly this code (save it as `format_xlsx.py` next to the script, run
+   `python3 -I format_xlsx.py <output_dir>/NEFI_v3_energy_by_carrier_long.xlsx`):
+   ```python
+   import sys
+   import openpyxl
+   from openpyxl.styles import Font
+   from openpyxl.utils import get_column_letter
+
+   path = sys.argv[1]
+   wb = openpyxl.load_workbook(path)
+   for ws in wb:
+       for cell in ws[1]:
+           cell.font = Font(bold=True)
+       ws.freeze_panes = "A2"
+       ws.auto_filter.ref = ws.dimensions
+       for i, col in enumerate(ws.iter_cols(), 1):
+           width = max(len(str(c.value)) for c in col if c.value is not None) + 2
+           ws.column_dimensions[get_column_letter(i)].width = min(max(width, 10), 60)
+   wb.save(path)
+   ```
 3. Verify (stop and report if any check fails):
    - `data` has 2,860 rows (2 scenarios × 13 sectors × 10 carriers × 11 years), no empty
      values, no negative values, unit always TWh.

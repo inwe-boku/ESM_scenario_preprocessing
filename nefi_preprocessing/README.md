@@ -8,6 +8,8 @@ Project: INFRA-ENSHURE · Data source: AIT (NEFI Lab) · Prepared: 2026-10-15
 |------------------------------------|------------------------------------|
 | `NEFI_v3_energy_by_carrier_long.xlsx` | sheet **`data`** – the machine-readable long table (the deliverable) |
 |  | sheet `checks` – per scenario/sector/year: sum of carriers vs. AIT "Total energy", rebuilt gas mix vs. source gas aggregate |
+|  | sheet **`economy`** – GDP formation and material output per sector (see section *Economy*) |
+|  | sheet `economy_checks` – sum and duplicate checks of the Economy tab |
 |  | sheet `dropped_rows_log` – every source row that was not carried over, with source cell and reason |
 | `README.md` | this file – all assumptions and rules |
 | `repair_nefi.py` | script that produces the workbook from the source xlsx |
@@ -18,7 +20,7 @@ Project: INFRA-ENSHURE · Data source: AIT (NEFI Lab) · Prepared: 2026-10-15
   - Differences to v3 in the energy tables (cell-by-cell comparison): (a) Sc. 2.a Textiles 2050 is now filled in (was empty); (b) Sc. 1 Chemical rows 42/43: block title and the top "Hydrogen" label moved one cell (the label is now in column B). All other energy values are identical.
   - there are jumps in Scenario 1 chemical between 2025 and 2030 and the Scneario 1 "All Manuf" block does not match its sectors after 2025
 - Used tabs: **`Scenario 1`** (columns A–M) and **`Scenario 2.a`** (columns A–M).
-- Not used (scope decision): the CO₂-by-sector tables (right-hand side of both scenario tabs), tab `test` (AIT check sheet in GWyr), tab `Economy`.
+- Not used (scope decision): the CO₂-by-sector tables (right-hand side of both scenario tabs), tab `test` (AIT check sheet in GWyr). Tab `Economy` is used for the `economy` sheet only (see section *Economy*).
 
 ## Structure of the `data` sheet
 
@@ -126,6 +128,49 @@ Dropped: "Total energy" of every sector, the gas aggregate rows, and the whole "
 
 1.  Are the H2 rows treated consistently?
 2.  Sc. 1 Chemical 2025→2030 break and the outdated Sc. 1 AllManuf block: intended?
+
+## Economy (sheet `economy`)
+
+Source: tab `Economy`, columns A–M. GDP block rows 4–39 (one table, no scenario split); produced goods Sc. 1 rows 45–80, Sc. 2a rows 84–114. Full step-by-step rules for agents: `prompt_for_nefi_economy.txt`.
+
+Columns: `scenario | sector | variable | product | unit | year | value`. Sectors are exactly the 13 sector codes of sheet `data`.
+
+| Variable | Unit | Content |
+|------------------------------------|------------------------------------|------------------------------------|
+| `Industry\|GDP formation [by Sector]\|<sector>` | `bn EUR` | GDP formation of the sector (source `10^9 EUR`); same values in both scenarios |
+| `Industry\|Material Output [by Sector]\|<sector>\|<product>` | `Mt` (Bricks: `m3`) | domestic production of the product |
+| `Industry\|Material Output [by Sector]\|<sector>` | `Mt` | empty value: sectors without produced goods (Machinery, TransportEquipment, FoodAndBeverages, Wood, Textiles, NonSpecifiedIndustry, Construction, Mining) |
+
+759 rows: 286 GDP (13 × 11 × 2) + 473 Material Output (Sc1 242, Sc2a 231). Units never carry "/a".
+
+**GDP mapping:** Construction (row 13), Mining (16), Iron and Steel → `IronSteel`, Chemical and Petrochemical → `Chemical`, Non-Ferrous Metals → `NonFerrousMetals`, Non-Metalic Minerals → `NonMetalicMinerals`, Transport Equipment → `TransportEquipment`, Machinery, Food and Beverages → `FoodAndBeverages`, Pulp, Paper and Print → `PulpPaper`, Wood and Wood Products → `Wood`, Textiles and Leather → `Textiles`, other manufacturing → `NonSpecifiedIndustry` (rows 17–27).
+
+**Material Output products:**
+
+| Sector | Products (source label) |
+|------------------------------------|------------------------------------|
+| `IronSteel` | `PrimarySteel` (Iron & Steel, primary − of which imported as HB-DRI), `SecondarySteelEAF` |
+| `NonMetalicMinerals` | `Cement` (domestic production), `Lime`, `Glass`, `Bricks` (m3), `SodaAsh`, `LimestoneDolomite` |
+| `Chemical` | `Ammonia`, `NitricAcid`, `Methanol` (dom. prod.), `Olefines` (Sc1 only) — kt converted to Mt (/1000) |
+| `PulpPaper` | `Pulp` (source unit "Mtpaper/a" = Mt) |
+| `NonFerrousMetals` | `SecondaryAluminium` — kt converted to Mt (/1000) |
+
+**Rules:**
+1. GDP is copied to both scenarios (source has one table). Rows 28/29 (duplicates of 13/16), all subtotals and all non-industry rows (Agriculture, Services, Energy, Total GDP) are dropped.
+2. Material Output = domestic production only. Dropped: cement total, "of which imported clinker", methanol demand and imports, and the shares "of which from Methanol", "Wood imports", "H2 dom. Prod.".
+3. `PrimarySteel` = primary steel − HB-DRI imports (only domestic ironmaking counts). Empty HB-DRI cells (before 2030) count as 0.
+4. Only value transformations: kt → Mt and the HB-DRI subtraction. Bricks stay in m3 (no density assumption). Sectors without data stay empty (no proxy).
+
+**Checks (`economy_checks`):** rows 17–27 = Manufacturing sub-total; Manufacturing + Construction + Mining = GDP INDUSTRY; Construction and Mining parts = their rows; rows 28/29 = rows 13/16; cement domestic + imported clinker = cement total (both scenarios); Sc1 methanol dom. prod. + imports = demand. All pass (max. deviation < 1·10⁻¹³).
+
+**Data quirks:**
+1. Sc1 `PrimarySteel` drops to 3.8 Mt (2030–2035), 0.93 Mt (2040–2045) and 0 Mt (2050) because iron is imported as HB-DRI. Sc2a HB-DRI is 0.
+2. Sc1 domestic cement halves from 2040 (imported clinker); in Sc2a domestic = total.
+3. Sc2a has no methanol demand/imports and no olefine rows; Sc2a methanol dom. prod. = Sc1 methanol demand. Sc2a has no `Olefines` product.
+4. Sc2a ammonia halves from 2040.
+5. Cement label "domestic produdtion" is misspelled in the source.
+
+**Open questions for AIT:** (1) Price base of GDP? (2) Is GDP really identical in both scenarios? (3) Bricks tonnage/density? (4) Olefines in Sc2a not reported or same as Sc1?
 
 ## Reproducibility
 
