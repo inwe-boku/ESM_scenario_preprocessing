@@ -1,0 +1,134 @@
+You work in the project INFRA-ENSHURE with AIT Austria. This is the second preprocessing step of
+the AIT/NEFI industry workbook (260831-industry-energy-demand-NEFI-POI-INFRAENSURE-Export.xlsx).
+Step 1 (prompt_for_nefi_inputs.txt) builds the energy-by-carrier long table. This step adds the
+tab "Economy" (GDP formation and produced goods) to the same output file
+NEFI_v3_energy_by_carrier_long.xlsx. Work offline on the attached file. Do not ask questions
+unless a check below fails.
+
+## Steps
+1. Copy the source xlsx into its own empty folder. Run the unchanged script:
+   `python3 -I repair_nefi.py <source.xlsx> <output_dir>`
+   One run writes both steps. The sheets are `data`, `checks`, `economy`, `economy_checks` and
+   `dropped_rows_log`. `data` and `checks` must stay identical to the result of step 1.
+2. Format every sheet as in step 1: bold header row, freeze panes at A2, autofilter over the used
+   range, column width = longest value + 2 (min 10, max 60). Do not change any values.
+   Use exactly this code (save it as `format_xlsx.py` next to the script, run
+   `python3 -I format_xlsx.py <output_dir>/NEFI_v3_energy_by_carrier_long.xlsx`):
+   ```python
+   import sys
+   import openpyxl
+   from openpyxl.styles import Font
+   from openpyxl.utils import get_column_letter
+
+   path = sys.argv[1]
+   wb = openpyxl.load_workbook(path)
+   for ws in wb:
+       for cell in ws[1]:
+           cell.font = Font(bold=True)
+       ws.freeze_panes = "A2"
+       ws.auto_filter.ref = ws.dimensions
+       for i, col in enumerate(ws.iter_cols(), 1):
+           width = max(len(str(c.value)) for c in col if c.value is not None) + 2
+           ws.column_dimensions[get_column_letter(i)].width = min(max(width, 10), 60)
+   wb.save(path)
+   ```
+3. Verify (stop and report if any check fails):
+   - `economy` has 759 rows: 286 GDP rows (13 sectors × 11 years × 2 scenarios) and 473
+     Material Output rows (Sc1 242, Sc2a 231).
+   - The set of sectors in `economy` is identical to the set in `data` (13 sectors).
+   - Units are only `bn EUR`, `Mt` and `m3` (m3 only for Bricks).
+   - No negative values. Empty values only in the Material Output rows of the 8 sectors without
+     produced goods (8 sectors × 11 years per scenario).
+   - All rows of `economy_checks` have ok = True (|diff| <= 0.002).
+   - Spot values: Sc1 PrimarySteel 2025 6.9 / 2030 3.8 / 2050 0.0 Mt; Sc2a PrimarySteel 2050
+     6.9 Mt; Sc2a Ammonia 2050 0.2538445 Mt; GDP IronSteel 2017 3.0707864706 bn EUR. Compare
+     spot values with |diff| < 1e-9 (the xlsx write can change the last binary digit).
+4. Update the "Economy" section of README.md (source rows, mappings, rules, checks, quirks, open
+   questions below).
+
+## Scope
+- Tab "Economy", columns A–M. GDP block: rows 4–39. Produced goods: Sc. 1 rows 45–80, Sc. 2a rows
+  84–114.
+- Only industry: the 13 sectors of step 1. Excluded: Agriculture, Services, Energy, Total GDP and
+  all subtotals.
+- Years and scenarios as in step 1 (Scenario1 = Sc. 1 = POI_2026, Scenario2a = Sc. 2a = ZEM).
+- Keep full precision, never round, impute, interpolate or average. The only value changes are
+  kt -> Mt (/1000) and the HB-DRI subtraction (rule 4).
+
+## Output table (sheet `economy`)
+Columns, in this order: scenario | sector | variable | product | unit | year | value.
+Sectors: exactly the 13 sector codes of sheet `data`. Variables:
+- `Industry|GDP formation [by Sector]|<sector>`, unit `bn EUR`, product empty.
+- `Industry|Material Output [by Sector]|<sector>|<product>`, unit `Mt` (Bricks: `m3`).
+- Sectors without produced goods (Machinery, TransportEquipment, FoodAndBeverages, Wood,
+  Textiles, NonSpecifiedIndustry, Construction, Mining) get one row per scenario × year with
+  variable `Industry|Material Output [by Sector]|<sector>`, empty product, unit `Mt` and an empty
+  value. They are never filled with a proxy (e.g. GDP).
+Units never carry "/a" (all values are annual). Allowed units: `Mt`, `bn EUR`; `m3` only for
+Bricks (decision: no density assumption).
+
+## GDP mapping (source row -> sector), source unit 10^9 EUR -> bn EUR
+13 Construction -> Construction; 16 Mining -> Mining; 17 Iron and Steel -> IronSteel;
+18 Chemical and Petrochemical -> Chemical; 19 Non-Ferrous Metals -> NonFerrousMetals;
+20 Non-Metalic Minerals -> NonMetalicMinerals; 21 Transport Equipment -> TransportEquipment;
+22 Machinery -> Machinery; 23 Food and Beverages -> FoodAndBeverages;
+24 Pulp, Paper and Print -> PulpPaper; 25 Wood and Wood Products -> Wood;
+26 Textiles and Leather -> Textiles; 27 other manufacturing -> NonSpecifiedIndustry.
+
+## Material Output mapping (source label -> sector | product | source unit -> unit)
+- Iron & Steel, primary MINUS of which imported as HB-DRI -> IronSteel | PrimarySteel | MtSteel/a -> Mt
+- Steel secondary (EAF) -> IronSteel | SecondarySteelEAF | Mtsteel/a -> Mt
+- domestic produdtion (sic, cement) -> NonMetalicMinerals | Cement | MtCement/a -> Mt
+- Lime dom. Prod. -> NonMetalicMinerals | Lime | Mt -> Mt
+- Glass dom. Prod. -> NonMetalicMinerals | Glass | Mt -> Mt
+- Bricks dom. Prod. -> NonMetalicMinerals | Bricks | m³ -> m3
+- Soda Ash dom. Prod. -> NonMetalicMinerals | SodaAsh | Mt -> Mt
+- Limestone & Dolomit dom.prod. -> NonMetalicMinerals | LimestoneDolomite | Mt -> Mt
+- Ammonia dom. Prod. -> Chemical | Ammonia | ktAmmonia/a -> Mt (/1000)
+- Nitric acid dom. Prod. -> Chemical | NitricAcid | ktNitric acid/a -> Mt (/1000)
+- Methanol dom. Prod. -> Chemical | Methanol | ktMethanol/a -> Mt (/1000)
+- Olefine domestic production -> Chemical | Olefines | ktOlefine/a -> Mt (/1000), Sc1 only
+- Pulp prod. Dom. -> PulpPaper | Pulp | Mtpaper/a -> Mt
+- Al dom. Secondary prod. -> NonFerrousMetals | SecondaryAluminium | ktAL/a -> Mt (/1000)
+
+## Rules
+1. GDP has no scenario split in the source. Copy the same values to Scenario1 and Scenario2a.
+2. Use the sector rows 13 and 16 for Construction/Mining. Drop rows 28/29 (exact duplicates,
+   checked), all subtotals (Agriculture, Construction parts, M&Q parts, Manufacturing, GDP
+   INDUSTRY) and all non-industry rows. Log every dropped row in `dropped_rows_log`.
+3. Material Output = domestic production only. Drop and log: cement total (incl. cement from
+   imported clinker), "of which imported clinker", "Methanol DEMAND", "Methanol imports", and
+   the shares "of which from Methanol", "Wood imports" and "H2 dom. Prod.". These are not
+   outputs.
+4. PrimarySteel = "Iron & Steel, primary" − "of which imported as HB-DRI". An empty HB-DRI cell
+   (years before 2030) means no import and counts as 0. Reason: only domestic ironmaking counts
+   as material output.
+5. Map rows by label within the fixed row ranges. The script stops on an unknown label, an
+   unexpected unit, an empty value in a kept row, a wrong year header or a negative output.
+
+## Checks (sheet `economy_checks`, per year)
+- manufacturing_subtotal: rows 17–27 sum to row 30.
+- gdp_industry: rows 30 + 13 + 16 sum to row 31.
+- construction_parts: rows 10–12 sum to row 13. mining_parts: rows 14–15 sum to row 16.
+- duplicate_construction / duplicate_mining: row 28 = row 13, row 29 = row 16.
+- cement_total (both scenarios): domestic production + imported clinker = cement total.
+- methanol_demand (Sc1): Methanol dom. Prod. + Methanol imports = Methanol DEMAND.
+
+## Data quirks to document (do not correct)
+- Sc1 PrimarySteel falls to 3.8 Mt (2030–2035), 0.93 Mt (2040–2045) and 0 Mt (2050), because
+  the iron is imported as HB-DRI. In Sc2a HB-DRI is 0, so PrimarySteel stays 6.9 Mt.
+- Sc1 domestic cement production halves from 2040 (2.616 Mt, the rest from imported clinker).
+  In Sc2a domestic production equals total cement production in every year.
+- Sc2a has no "Methanol DEMAND", "Methanol imports", "Olefine domestic production" or "of which
+  from Methanol" rows. Sc2a Methanol dom. Prod. equals Sc1 Methanol DEMAND (no imports). Sc2a
+  therefore has no Olefines product (not imputed).
+- Sc2a Ammonia halves from 2040 (253.8 kt).
+- The Pulp row has the unit "Mtpaper/a" (treated as Mt). The cement label "domestic produdtion"
+  is misspelled in the source.
+- GDP rows 28/29 repeat rows 13/16. GDP is identical for both scenarios.
+
+## Open questions for AIT (list in README)
+1. Price base of the GDP values (EUR of which year, real or nominal)?
+2. Is GDP really identical in Sc1 and Sc2a?
+3. Bricks: tonnage or density, so that they can be expressed in Mt?
+4. Is Olefine production in Sc2a really not reported, or the same as in Sc1?
