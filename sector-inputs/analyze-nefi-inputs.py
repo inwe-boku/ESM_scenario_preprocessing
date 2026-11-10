@@ -17,6 +17,7 @@ def _():
 
     from esm_scenario_preprocessing.harmonization_helpers import (
         nefi_energy_by_pypsa_carrier,
+        nefi_energy_to_iamc,
         pypsa_combinations_for_nefi_inputs_dict,
     )
 
@@ -27,6 +28,7 @@ def _():
         go,
         mo,
         nefi_energy_by_pypsa_carrier,
+        nefi_energy_to_iamc,
         pd,
         pypsa_combinations_for_nefi_inputs_dict,
     )
@@ -681,8 +683,26 @@ def _(mo):
     return
 
 
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ---
+    ## Export processed NEFI energy input as IAMC file
+    > `resources/NEFI_v3_energy_by_carrier_iamc.xlsx`, model `NEFI`, region `Austria`
+
+    - same processing as above: NEFI carriers mapped to PyPSA-AT carriers
+      (e.g. Electricity + ElectricityHP → Electricity), all scenarios, sectors and years
+    - variables `Demand|Industry|<sector>|<carrier>` in TWh/yr, no totals
+    - workshop 2025 override is **not** applied
+    """)
+    return
+
+
 @app.cell
-def _():
+def _(mo, nefi_energy, nefi_energy_to_iamc):
+    nefi_iamc = nefi_energy_to_iamc(nefi_energy)
+    nefi_iamc.to_excel("resources/NEFI_v3_energy_by_carrier_iamc.xlsx")
+    mo.ui.table(nefi_iamc.timeseries().reset_index(), selection=None)
     return
 
 

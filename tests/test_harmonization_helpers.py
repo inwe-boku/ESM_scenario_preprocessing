@@ -4,6 +4,7 @@ import pytest
 from esm_scenario_preprocessing.harmonization_helpers import (
     energy_inputs_harmonization,
     nefi_energy_by_pypsa_carrier,
+    nefi_energy_to_iamc,
     nefi_to_pypsa_inputs_dict,
 )
 
@@ -129,3 +130,31 @@ def test_nefi_energy_by_pypsa_carrier_rejects_unknown_selection(
 ):
     with pytest.raises(ValueError, match="Unknown"):
         nefi_energy_by_pypsa_carrier(nefi_long_df, scenario, sectors)
+
+
+def test_nefi_energy_to_iamc_builds_variables_from_sector_and_carrier(nefi_long_df):
+    result = nefi_energy_to_iamc(nefi_long_df)
+
+    assert result.model == ["NEFI"]
+    assert result.region == ["Austria"]
+    assert result.unit == ["TWh/yr"]
+    assert "Demand|Industry|Iron and Steel|Electricity" in result.variable
+    assert "Demand|Industry|Chemicals|Methanol" in result.variable
+    # 2 scenarios x 2 sectors x 10 PyPSA carriers x 2 years
+    assert len(result) == 80
+
+
+def test_nefi_energy_to_iamc_contains_notebook_processing(nefi_long_df):
+    result = nefi_energy_to_iamc(nefi_long_df).filter(
+        scenario="Scenario1", variable="Demand|Industry|Chemicals|Electricity"
+    )
+
+    # Electricity + ElectricityHP, as in nefi_energy_by_pypsa_carrier
+    assert (result.data["value"] == 22.0).all()
+
+
+def test_nefi_energy_to_iamc_rejects_unknown_sector(nefi_long_df):
+    nefi_long_df.loc[0, "sector"] = "Unknown"
+
+    with pytest.raises(ValueError, match="No IAMC label"):
+        nefi_energy_to_iamc(nefi_long_df)
