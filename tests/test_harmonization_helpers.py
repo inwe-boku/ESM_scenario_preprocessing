@@ -3,6 +3,8 @@ import pytest
 
 from esm_scenario_preprocessing.harmonization_helpers import (
     energy_inputs_harmonization,
+    nefi_energy_by_pypsa_carrier,
+    nefi_energy_to_iamc,
     nefi_to_pypsa_inputs_dict,
 )
 
@@ -80,3 +82,79 @@ def test_energy_inputs_harmonization_does_not_mutate_input(nefi_df):
     energy_inputs_harmonization(nefi_df)
 
     pd.testing.assert_frame_equal(nefi_df, original)
+
+
+@pytest.fixture
+def nefi_long_df() -> pd.DataFrame:
+    """Minimal long-format NEFI `data` sheet: 2 scenarios x 2 sectors x 4 carriers."""
+    rows = []
+    for scenario_offset, scenario in enumerate(["Scenario1", "Scenario2a"]):
+        for sector_offset, sector in enumerate(["IronSteel", "Chemical"]):
+            for carrier in ["Electricity", "ElectricityHP", "GasGridMix", "Hydrogen"]:
+                for year in (2025, 2050):
+                    value = 1.0 + 10 * sector_offset + 100 * scenario_offset
+                    rows.append((scenario, sector, carrier, "TWh", year, value))
+    return pd.DataFrame(
+        rows, columns=["scenario", "sector", "carrier", "unit", "year", "value"]
+    )
+
+
+def test_nefi_energy_by_pypsa_carrier_single_sector(nefi_long_df):
+    result = nefi_energy_by_pypsa_carrier(nefi_long_df, "Scenario1", ["Chemical"])
+
+    assert list(result.columns) == [2025, 2050]
+    assert (result.loc["elec"] == 22.0).all()  # Electricity + ElectricityHP
+    assert (result.loc["methane"] == 11.0).all()
+    assert (result.loc["hydrogen"] == 11.0).all()
+    assert (result.loc["coal and coke"] == 0).all()
+
+
+def test_nefi_energy_by_pypsa_carrier_sums_all_sectors_by_default(nefi_long_df):
+    result = nefi_energy_by_pypsa_carrier(nefi_long_df, "Scenario2a")
+
+    assert (result.loc["hydrogen"] == 101.0 + 111.0).all()
+
+
+def test_nefi_energy_by_pypsa_carrier_drops_non_carrier_rows(nefi_long_df):
+    result = nefi_energy_by_pypsa_carrier(nefi_long_df, "Scenario1")
+
+    assert "Total" not in result.index
+    assert "losses" not in result.index
+
+
+@pytest.mark.parametrize(
+    "scenario, sectors", [("Scenario3", None), ("Scenario1", ["AllManuf"])]
+)
+def test_nefi_energy_by_pypsa_carrier_rejects_unknown_selection(
+    nefi_long_df, scenario, sectors
+):
+    with pytest.raises(ValueError, match="Unknown"):
+        nefi_energy_by_pypsa_carrier(nefi_long_df, scenario, sectors)
+
+
+def test_nefi_energy_to_iamc_builds_variables_from_sector_and_carrier(nefi_long_df):
+    result = nefi_energy_to_iamc(nefi_long_df)
+
+    assert result.model == ["NEFI"]
+    assert result.region == ["Austria"]
+    assert result.unit == ["TWh/yr"]
+    assert "Demand|Industry|Iron and Steel|Electricity" in result.variable
+    assert "Demand|Industry|Chemicals|Methanol" in result.variable
+    # 2 scenarios x 2 sectors x 10 PyPSA carriers x 2 years
+    assert len(result) == 80
+
+
+def test_nefi_energy_to_iamc_contains_notebook_processing(nefi_long_df):
+    result = nefi_energy_to_iamc(nefi_long_df).filter(
+        scenario="Scenario1", variable="Demand|Industry|Chemicals|Electricity"
+    )
+
+    # Electricity + ElectricityHP, as in nefi_energy_by_pypsa_carrier
+    assert (result.data["value"] == 22.0).all()
+
+
+def test_nefi_energy_to_iamc_rejects_unknown_sector(nefi_long_df):
+    nefi_long_df.loc[0, "sector"] = "Unknown"
+
+    with pytest.raises(ValueError, match="No IAMC label"):
+        nefi_energy_to_iamc(nefi_long_df)
