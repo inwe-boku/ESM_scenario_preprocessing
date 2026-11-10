@@ -71,7 +71,7 @@ flowchart LR
 
 1. **Preprocessing:** `nefi_preprocessing/repair_nefi.py` harmonizes the raw NEFI export (energy by carrier, GDP formation and material output) into the standard output file (see below).
 2. **Manual check:** review the `checks`, `economy_checks` and `dropped_rows_log` sheets and the open questions in `nefi_preprocessing/README.md`. Report source issues back to AIT.
-3. **Evaluation:** `sector-inputs/analyze-nefi-inputs.py` evaluates the NEFI scenarios.
+3. **Evaluation:** `sector-inputs/analyze-nefi-inputs.py` evaluates the NEFI scenarios. It reads sheet `data` of the standard output file (`resources/NEFI_v3_energy_by_carrier_long.xlsx`) and maps the carriers to PyPSA-AT carriers with `nefi_energy_by_pypsa_carrier`; `AllManuf` is the sum of the 13 sectors.
 4. **JRC evaluation:** `sector-inputs/preprocess_nefi-data.py` evaluates JRC-IDEES data for Austria (added value vs. physical output).
 5. **Processing:** the NEFI data are combined with the JRC data to produce the PyPSA-AT industry inputs.
 

@@ -16,7 +16,7 @@ def _():
     import plotly.graph_objects as go
 
     from esm_scenario_preprocessing.harmonization_helpers import (
-        energy_inputs_harmonization,
+        nefi_energy_by_pypsa_carrier,
         pypsa_combinations_for_nefi_inputs_dict,
     )
 
@@ -24,9 +24,9 @@ def _():
     Path("outputs_workshop").mkdir(exist_ok=True)
 
     return (
-        energy_inputs_harmonization,
         go,
         mo,
+        nefi_energy_by_pypsa_carrier,
         pd,
         pypsa_combinations_for_nefi_inputs_dict,
     )
@@ -336,19 +336,20 @@ def _(mo, nefi_scenario):
 
 
 @app.cell
-def _(energy_inputs_harmonization, nefi_scenario, pd):
-    # Import NEFi values, convert unit to TWh and harmonize with pypsa-energy inputs
-    nefi_total_industry_fe = pd.read_excel(
-        f"resources/v3-{nefi_scenario.value}_deduplicated.xlsx",
-        sheet_name=f"{nefi_scenario.value}-AllManuf",
-        index_col=0,
-        header=0,
-        decimal=",",
+def _(pd):
+    # Standard NEFI output of nefi_preprocessing/repair_nefi.py (long format, TWh)
+    nefi_energy = pd.read_excel(
+        "resources/NEFI_v3_energy_by_carrier_long.xlsx", sheet_name="data"
     )
-    nefi_fe = nefi_total_industry_fe.select_dtypes(
-        exclude=object
-    )  # .mul(8.760) # GWyr to TWh <-- new input is in TWh
-    nefi_total_industry_fe_in_pypsa = energy_inputs_harmonization(nefi_fe)
+    return (nefi_energy,)
+
+
+@app.cell
+def _(nefi_energy, nefi_energy_by_pypsa_carrier, nefi_scenario):
+    # Total industry = sum of all 13 NEFI sectors, harmonized with pypsa-energy inputs
+    nefi_total_industry_fe_in_pypsa = nefi_energy_by_pypsa_carrier(
+        nefi_energy, nefi_scenario.value
+    )
     return (nefi_total_industry_fe_in_pypsa,)
 
 
@@ -390,7 +391,7 @@ def _(mo):
     mo.md(r"""
     ---
     ## Analyze Industry Sectors in NEFI
-    ⚠️ **the given sectors are only a subset and do not sum up to industry demand of all sectors**
+    - `AllManuf` is the sum of all 13 NEFI sectors
     - single Sector inputs
     - System flows from energy input to sector output
     """)
@@ -431,22 +432,13 @@ def _(mo, nefi_sector):
 
 
 @app.cell
-def _(energy_inputs_harmonization, pd):
+def _(nefi_energy, nefi_energy_by_pypsa_carrier):
     def read_nefi_sector(scenario, sector):
-        # Read a NEFI scenario/sector sheet, harmonize to pypsa carriers and drop
-        # the non-carrier "Total"/"losses" rows. Reused for both the interactive
-        # single-scenario plot and the workshop batch export.
-        _df = pd.read_excel(
-            f"resources/v3-{scenario}_deduplicated.xlsx",
-            sheet_name=f"{scenario}-{sector}",
-            index_col=0,
-            header=0,
-        )
-        _df = _df.select_dtypes(
-            exclude=object
-        )  # .mul(8.760) # GWyr to TWh <-- new intput is in TWh
-        _df = energy_inputs_harmonization(_df)
-        return _df.drop(["Total", "losses"], axis=0, errors="ignore")
+        # Select a NEFI scenario/sector (AllManuf = all sectors), harmonized to pypsa
+        # carriers. Reused for both the interactive single-scenario plot and the
+        # workshop batch export.
+        _sectors = None if sector == "AllManuf" else [sector]
+        return nefi_energy_by_pypsa_carrier(nefi_energy, scenario, _sectors)
 
     return (read_nefi_sector,)
 
@@ -613,7 +605,7 @@ def _(
 
 
 @app.cell
-def _(energy_inputs_harmonization, nefi_scenario, pd, year):
+def _(nefi_energy, nefi_energy_by_pypsa_carrier, nefi_scenario, pd, year):
     sectors = [
         "IronSteel",
         "Chemical",
@@ -632,24 +624,14 @@ def _(energy_inputs_harmonization, nefi_scenario, pd, year):
     dfs = []
 
     for sector in sectors:
-        df = pd.read_excel(
-            f"resources/v3-{nefi_scenario.value}_deduplicated.xlsx",
-            sheet_name=nefi_scenario.value + "-" + sector,
-            index_col=0,
-            header=0,
-        )
-        df = df.select_dtypes(
-            exclude=object
-        )  # .mul(8.760)  # GWyr to TWh <-- new input is in TWh
+        df = nefi_energy_by_pypsa_carrier(nefi_energy, nefi_scenario.value, [sector])
         df = df[[int(year.value)]]  # Filter to selected year
-        df = energy_inputs_harmonization(df)  # Harmonize inputs
         df.columns = [sector]  # Rename column to sector name
-        df.drop("Total", axis=0, inplace=True, errors="ignore")
         dfs.append(df)
 
     # Combine all sectors
     nefi_inputs_by_sector = pd.concat(dfs, axis=1)
-    return nefi_inputs_by_sector, sectors
+    return (nefi_inputs_by_sector,)
 
 
 @app.cell
@@ -684,44 +666,13 @@ def _(go, nefi_inputs_by_sector, nefi_scenario, year):
     return
 
 
-@app.cell
-def _(energy_inputs_harmonization, nefi_scenario, pd, sectors, year):
-    # Check, if dataset is consistent, or sectors are missing
-    _dfs = []
-
-    for _sector in sectors + ["AllManuf"]:
-        _df = pd.read_excel(
-            f"resources/v3-{nefi_scenario.value}_deduplicated.xlsx",
-            sheet_name=nefi_scenario.value + "-" + _sector,
-            index_col=0,
-            header=0,
-        )
-        _df = _df.select_dtypes(
-            exclude=object
-        )  # .mul(8.760)  # GWyr to TWh <-- new input is in TWh
-        _df = _df[[int(year.value)]]  # Filter to selected year
-        _df = energy_inputs_harmonization(_df)  # Harmonize inputs
-        _df.drop("Total", axis=0, inplace=True, errors="ignore")
-        _df.columns = [_sector]
-        _dfs.append(_df)
-
-    all_sectors_and_sum = pd.concat(_dfs, axis=1)
-    all_sectors_and_sum["manual sum"] = all_sectors_and_sum[sectors].sum(axis=1)
-    all_sectors_and_sum[["manual sum", "AllManuf"]].plot.bar(
-        figsize=(15, 5),
-        backend="matplotlib",
-        title="Subsectors do not sum up to values of All Manifacturing [TWh/a] ",
-    )
-    return
-
-
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    #### Known Inconsistencies for that plot
-    - inconsistency in Naphtha, due to "Chem. Ind. Foss. Rohstoffe (ölbasiert)" with no definition.
-    - inconsistency in Methane, due to several duplicates in "Gas grid ix", "Gas grid mix" and different entries for non-fossil Gas.
-    - inconsistency in Hydrogen, due to several duplicate rows, we are actually taking the mean value of
+    #### Consistency of the NEFI data
+    The consistency of the sectors with the NEFI source (AIT totals, gas aggregates,
+    hydrogen) is checked in `nefi_preprocessing/repair_nefi.py` – see the sheets
+    `checks`, `economy_checks` and `dropped_rows_log` of the NEFI output file.
 
     This is the end.
 
